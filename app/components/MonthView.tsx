@@ -373,7 +373,7 @@ export function MonthView({ onViewChange }: MonthViewProps) {
                           >
                             {event.allDay
                               ? event.title
-                              : `${format(new Date(event.startTime), "h:mm")} ${event.title}`}
+                              : `${format(new Date(event.startTime), "h:mm")} – ${format(new Date(event.endTime), "h:mm")} ${event.title}`}
                           </button>
                         ))}
                         {moreCount > 0 && (

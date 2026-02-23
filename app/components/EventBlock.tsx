@@ -82,7 +82,7 @@ export function EventBlock({
       </p>
       {!isShort && (
         <p className="text-xs leading-tight opacity-70 truncate" style={{ color: event.color }}>
-          {format(start, "h:mm a")}
+          {format(start, "h:mm a")} – {format(end, "h:mm a")}
           {event.recurrenceRule && (
             <RotateCcw className="inline w-2.5 h-2.5 ml-0.5 opacity-60" />
           )}
