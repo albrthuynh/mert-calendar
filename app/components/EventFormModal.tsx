@@ -52,6 +52,16 @@ export function EventFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const parseResponseBody = async (res: Response) => {
+    const text = await res.text();
+    if (!text) return { json: null as unknown, text: "" };
+    try {
+      return { json: JSON.parse(text) as unknown, text };
+    } catch {
+      return { json: null as unknown, text };
+    }
+  };
+
   // Close on Escape
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -100,12 +110,23 @@ export function EventFormModal({
         body: JSON.stringify(payload),
       });
 
+      const { json, text } = await parseResponseBody(res);
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Failed to save event");
+        const maybeErr =
+          json && typeof json === "object" && json !== null
+            ? (json as { error?: string }).error
+            : undefined;
+        throw new Error(
+          maybeErr || (text ? text : `Failed to save event (${res.status})`)
+        );
       }
 
-      const saved = await res.json();
+      if (!json || typeof json !== "object") {
+        throw new Error("Server returned an empty response while saving.");
+      }
+
+      const saved = json as any;
       onSave({
         ...saved,
         startTime: saved.startTime ?? payload.startTime,

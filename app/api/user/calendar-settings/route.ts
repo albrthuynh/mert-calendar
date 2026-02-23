@@ -16,9 +16,16 @@ export async function GET() {
     },
   });
 
+  if (!user) {
+    return NextResponse.json(
+      { error: "Session invalid. Please sign out and sign in again." },
+      { status: 401 }
+    );
+  }
+
   return NextResponse.json({
-    backgroundUrl: user?.calendarBackgroundUrl ?? null,
-    topLeftUrl: user?.calendarTopLeftUrl ?? null,
+    backgroundUrl: user.calendarBackgroundUrl ?? null,
+    topLeftUrl: user.calendarTopLeftUrl ?? null,
   });
 }
 
@@ -42,6 +49,17 @@ export async function PUT(req: NextRequest) {
     typeof topLeftUrl === "string" && topLeftUrl.trim().length > 0
       ? topLeftUrl.trim().slice(0, 2048)
       : null;
+
+  const userExists = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true },
+  });
+  if (!userExists) {
+    return NextResponse.json(
+      { error: "Session invalid. Please sign out and sign in again." },
+      { status: 401 }
+    );
+  }
 
   const updated = await prisma.user.update({
     where: { id: session.user.id },
