@@ -58,6 +58,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
 
   // Live clock
   useEffect(() => {
@@ -67,14 +68,21 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     return () => clearInterval(interval);
   }, []);
 
-  // Scroll to current time on first mount
+  // Scroll to the current-time red line on first mount
   useEffect(() => {
-    if (scrollRef.current) {
-      const now = new Date();
-      const scrollTo = Math.max(0, (now.getHours() - 1) * HOUR_HEIGHT);
-      scrollRef.current.scrollTop = scrollTo;
-    }
-  }, []);
+    if (didInitialScrollRef.current) return;
+    if (!scrollRef.current) return;
+    if (!currentTime) return;
+
+    const currentTimeTop =
+      ((currentTime.getHours() * 60 + currentTime.getMinutes()) / 60) * HOUR_HEIGHT;
+
+    const viewportHeight = scrollRef.current.clientHeight;
+    const scrollTo = Math.max(0, currentTimeTop - viewportHeight / 2);
+
+    scrollRef.current.scrollTop = scrollTo;
+    didInitialScrollRef.current = true;
+  }, [currentTime]);
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
