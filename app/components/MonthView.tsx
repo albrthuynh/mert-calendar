@@ -25,6 +25,7 @@ const MAX_VISIBLE_EVENTS = 3;
 
 interface MonthViewProps {
   onViewChange: (view: ViewMode) => void;
+  backgroundUrl?: string;
 }
 
 function getCalendarDays(monthStart: Date): Date[] {
@@ -54,7 +55,7 @@ function getTodosForDay(todos: Todo[], day: Date): Todo[] {
   return todos.filter((todo) => isSameDay(new Date(todo.taskDate), day));
 }
 
-export function MonthView({ onViewChange }: MonthViewProps) {
+export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const [currentMonth, setCurrentMonth] = useState<Date>(
     () => startOfMonth(new Date())
   );
@@ -212,10 +213,21 @@ export function MonthView({ onViewChange }: MonthViewProps) {
 
   const monthLabel = format(currentMonth, "MMMM yyyy");
 
+  const containerStyle = backgroundUrl
+    ? {
+        backgroundImage: `url("${backgroundUrl}")`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }
+    : undefined;
+
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0">
+    <div
+      className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0"
+      style={containerStyle}
+    >
       {/* Navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
         <button
           onClick={goToToday}
           className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
@@ -272,7 +284,7 @@ export function MonthView({ onViewChange }: MonthViewProps) {
       </div>
 
       {/* Calendar + sidebar */}
-      <div className="flex flex-1 overflow-hidden min-h-0">
+      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
         <div className="flex flex-col flex-1 overflow-hidden min-h-0">
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">

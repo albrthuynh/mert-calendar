@@ -34,9 +34,10 @@ function getWeekLabel(weekStart: Date, weekEnd: Date): string {
 
 interface WeekViewProps {
   onViewChange?: (view: ViewMode) => void;
+  backgroundUrl?: string;
 }
 
-export function WeekView({ onViewChange }: WeekViewProps = {}) {
+export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [weekStart, setWeekStart] = useState<Date>(() =>
     startOfWeek(new Date(), { weekStartsOn: 0 })
   );
@@ -199,10 +200,21 @@ export function WeekView({ onViewChange }: WeekViewProps = {}) {
 
   const weekLabel = getWeekLabel(weekStart, weekEnd);
 
+  const containerStyle = backgroundUrl
+    ? {
+        backgroundImage: `url("${backgroundUrl}")`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }
+    : undefined;
+
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0">
+    <div
+      className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0"
+      style={containerStyle}
+    >
       {/* Week navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
         <button
           onClick={goToToday}
           className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
@@ -259,7 +271,7 @@ export function WeekView({ onViewChange }: WeekViewProps = {}) {
       </div>
 
       {/* Calendar + optional sidebar */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
       <div className="flex flex-col flex-1 overflow-hidden">
 
       {/* Day headers + todo sections */}
