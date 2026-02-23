@@ -17,6 +17,7 @@ import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { TodoSection } from "./TodoSection";
 import { TodoSidebar } from "./TodoSidebar";
+import { ViewToggle, type ViewMode } from "./ViewToggle";
 import { CalendarEvent, Todo } from "@/types/calendar";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 
@@ -31,7 +32,11 @@ function getWeekLabel(weekStart: Date, weekEnd: Date): string {
   return `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`;
 }
 
-export function WeekView() {
+interface WeekViewProps {
+  onViewChange?: (view: ViewMode) => void;
+}
+
+export function WeekView({ onViewChange }: WeekViewProps = {}) {
   const [weekStart, setWeekStart] = useState<Date>(() =>
     startOfWeek(new Date(), { weekStartsOn: 0 })
   );
@@ -220,6 +225,9 @@ export function WeekView() {
         <div className="ml-auto flex items-center gap-2">
           {loadingEvents && (
             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          )}
+          {onViewChange && (
+            <ViewToggle currentView="week" onViewChange={onViewChange} />
           )}
           <button
             onClick={() => {

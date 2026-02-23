@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/app/components/Navbar";
-import { WeekView } from "@/app/components/WeekView";
+import { CalendarView } from "@/app/components/CalendarView";
 
 export default async function CalendarPage() {
   const session = await auth();
@@ -10,7 +10,7 @@ export default async function CalendarPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-gray-900">
       <Navbar />
-      <WeekView />
+      <CalendarView />
     </div>
   );
 }
