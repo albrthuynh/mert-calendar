@@ -85,6 +85,7 @@ export function TodoSidebar({
                 onToggle={onToggle}
                 onDelete={onDelete}
                 onEdit={onEdit}
+                variant="sidebar"
               />
             ))}
           </div>

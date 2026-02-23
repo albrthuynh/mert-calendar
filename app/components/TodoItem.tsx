@@ -10,9 +10,16 @@ interface TodoItemProps {
   onToggle: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string, title: string) => void;
+  variant?: "embedded" | "sidebar";
 }
 
-export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
+export function TodoItem({
+  todo,
+  onToggle,
+  onDelete,
+  onEdit,
+  variant = "embedded",
+}: TodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(todo.title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,12 +83,16 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
                 setEditing(false);
               }
             }}
-            className="w-full text-xs bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-blue-400 rounded px-1 py-0.5 outline-none"
+            className={`w-full bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-blue-400 rounded px-1 py-0.5 outline-none ${
+              variant === "sidebar" ? "text-sm" : "text-xs"
+            }`}
           />
         ) : (
           <span
             onDoubleClick={() => setEditing(true)}
-            className={`text-xs block truncate cursor-default select-none ${
+            className={`block cursor-default select-none ${
+              variant === "sidebar" ? "text-sm break-words" : "text-xs truncate"
+            } ${
               todo.completed
                 ? "line-through text-gray-400 dark:text-gray-600"
                 : isOverdue
