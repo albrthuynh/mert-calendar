@@ -1,6 +1,8 @@
 import { signIn } from "@/lib/auth";
 import { CalendarDays } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default function SignInPage({
   searchParams,
 }: {
@@ -13,7 +15,7 @@ export default function SignInPage({
           <div className="w-14 h-14 bg-blue-500 rounded-2xl flex items-center justify-center">
             <CalendarDays className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Albert Calendar</h1>
+          <h1 className="text-2xl font-bold text-gray-900">MertCalendar</h1>
           <p className="text-gray-500 text-sm text-center">
             Your personal calendar with integrated to-do lists
           </p>
