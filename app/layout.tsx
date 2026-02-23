@@ -9,8 +9,9 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Albert Calendar",
+  title: "Mert Calendar",
   description: "Your personal calendar with integrated to-do lists",
+  icons: { icon: "/aut_creature.webp" },
 };
 
 export default function RootLayout({

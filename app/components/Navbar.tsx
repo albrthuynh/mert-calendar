@@ -1,5 +1,5 @@
 import { auth, signOut } from "@/lib/auth";
-import { CalendarDays, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Image from "next/image";
 import { DarkModeToggle } from "./DarkModeToggle";
 
@@ -9,9 +9,14 @@ export async function Navbar() {
   return (
     <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-4 shrink-0 z-10">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-          <CalendarDays className="w-4 h-4 text-white" />
-        </div>
+        <Image
+          src="/tbh-creature-autism-creature.gif"
+          alt="Mert Calendar"
+          width={32}
+          height={32}
+          className="w-8 h-8 object-contain"
+          unoptimized
+        />
         <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
           Mert Calendar
         </span>

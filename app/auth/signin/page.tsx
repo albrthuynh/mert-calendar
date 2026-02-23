@@ -1,5 +1,5 @@
 import { signIn } from "@/lib/auth";
-import { CalendarDays } from "lucide-react";
+import Image from "next/image";
 
 export const dynamic = "force-dynamic";
 
@@ -9,13 +9,17 @@ export default function SignInPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm flex flex-col items-center gap-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-10 w-full max-w-sm flex flex-col items-center gap-8">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-14 h-14 bg-blue-500 rounded-2xl flex items-center justify-center">
-            <CalendarDays className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">MertCalendar</h1>
+          <Image
+            src="/aut_creature.webp"
+            alt="Mert Calendar"
+            width={56}
+            height={56}
+            className="w-14 h-14 object-contain"
+          />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Mert Calendar</h1>
           <p className="text-gray-500 text-sm text-center">
             Your personal calendar with integrated to-do lists
           </p>
