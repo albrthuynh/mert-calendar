@@ -1,22 +1,25 @@
 import { auth, signOut } from "@/lib/auth";
 import { CalendarDays, LogOut } from "lucide-react";
 import Image from "next/image";
+import { DarkModeToggle } from "./DarkModeToggle";
 
 export async function Navbar() {
   const session = await auth();
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 shrink-0 z-10">
+    <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-4 shrink-0 z-10">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
           <CalendarDays className="w-4 h-4 text-white" />
         </div>
-        <span className="font-semibold text-gray-900 text-sm">
-          Albert Calendar
+        <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+          Mert Calendar
         </span>
       </div>
 
       <div className="flex-1" />
+
+      <DarkModeToggle />
 
       {session?.user && (
         <div className="flex items-center gap-3">
@@ -29,11 +32,11 @@ export async function Navbar() {
               className="rounded-full"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-semibold">
+            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 text-xs font-semibold">
               {session.user.name?.[0]?.toUpperCase() ?? "U"}
             </div>
           )}
-          <span className="text-sm text-gray-700 hidden sm:block">
+          <span className="text-sm text-gray-700 dark:text-gray-300 hidden sm:block">
             {session.user.name}
           </span>
 
@@ -45,7 +48,7 @@ export async function Navbar() {
           >
             <button
               type="submit"
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:block">Sign out</span>

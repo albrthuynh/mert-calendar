@@ -32,13 +32,13 @@ export function TodoSection({
   const hasAny = dayTodos.length > 0;
 
   return (
-    <div className="border-b border-gray-200 bg-gray-50/50">
+    <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
       {/* Section header */}
       <div className="flex items-center px-1 py-0.5 gap-1">
         {hasAny && (
           <button
             onClick={() => setCollapsed((v) => !v)}
-            className="p-0.5 rounded text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label={collapsed ? "Expand todos" : "Collapse todos"}
           >
             {collapsed ? (
@@ -49,14 +49,14 @@ export function TodoSection({
           </button>
         )}
         {hasAny && (
-          <span className="text-xs text-gray-400 tabular-nums">
+          <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
             {completedCount}/{dayTodos.length}
           </span>
         )}
         <div className="flex-1" />
         <button
           onClick={() => setShowModal(true)}
-          className="p-0.5 rounded text-gray-400 hover:text-blue-500 transition-colors"
+          className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors"
           aria-label="Add to-do"
         >
           <Plus className="w-3.5 h-3.5" />

@@ -36,7 +36,7 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
   };
 
   return (
-    <div className="group flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 transition-colors">
+    <div className="group flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
       {/* Checkbox */}
       <button
         onClick={() => onToggle(todo.id, !todo.completed)}
@@ -76,17 +76,17 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
                 setEditing(false);
               }
             }}
-            className="w-full text-xs bg-white border border-blue-400 rounded px-1 py-0.5 outline-none"
+            className="w-full text-xs bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-blue-400 rounded px-1 py-0.5 outline-none"
           />
         ) : (
           <span
             onDoubleClick={() => setEditing(true)}
             className={`text-xs block truncate cursor-default select-none ${
               todo.completed
-                ? "line-through text-gray-400"
+                ? "line-through text-gray-400 dark:text-gray-600"
                 : isOverdue
-                ? "text-red-600"
-                : "text-gray-700"
+                ? "text-red-600 dark:text-red-400"
+                : "text-gray-700 dark:text-gray-300"
             }`}
             title={todo.title}
           >
@@ -99,7 +99,7 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
       {!editing && dueDate && (
         <span
           className={`flex items-center gap-0.5 text-xs shrink-0 tabular-nums ${
-            isOverdue ? "text-red-500" : "text-gray-400"
+            isOverdue ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-gray-500"
           }`}
         >
           <Clock className="w-2.5 h-2.5" />
@@ -110,7 +110,7 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
       {/* Delete button */}
       <button
         onClick={() => onDelete(todo.id)}
-        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 transition-all"
+        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all"
         aria-label="Delete"
       >
         <Trash2 className="w-3 h-3" />

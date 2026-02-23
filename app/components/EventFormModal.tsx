@@ -126,15 +126,15 @@ export function EventFormModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-100 dark:border-gray-700">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4">
-          <h2 className="text-base font-semibold text-gray-900">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             {isEditing ? "Edit event" : "New event"}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
           >
             <X className="w-4 h-4" />
           </button>
@@ -149,32 +149,32 @@ export function EventFormModal({
               placeholder="Add title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none text-lg font-medium py-1 placeholder-gray-400 transition-colors"
+              className="w-full border-b-2 border-gray-200 dark:border-gray-700 focus:border-blue-500 outline-none text-lg font-medium py-1 placeholder-gray-400 dark:placeholder-gray-600 bg-transparent text-gray-900 dark:text-gray-100 transition-colors"
             />
           </div>
 
           {/* Start / End times */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
-              <label className="text-xs font-medium text-gray-500 w-12">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 w-12">
                 Start
               </label>
               <input
                 type="datetime-local"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div className="flex items-center gap-3">
-              <label className="text-xs font-medium text-gray-500 w-12">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 w-12">
                 End
               </label>
               <input
                 type="datetime-local"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -185,39 +185,39 @@ export function EventFormModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           />
 
           {/* Color */}
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">Color</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Color</p>
             <ColorPicker value={color} onChange={setColor} />
           </div>
 
           {/* Recurrence */}
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-1.5">Repeat</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Repeat</p>
             <RecurrenceSelector
               value={recurrenceRule}
               onChange={setRecurrenceRule}
             />
             {recurrenceRule && (
               <div className="mt-2 flex items-center gap-2">
-                <label className="text-xs text-gray-500 shrink-0">
+                <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
                   End repeat on
                 </label>
                 <input
                   type="date"
                   value={recurrenceEndDate}
                   onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             )}
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+            <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
@@ -227,7 +227,7 @@ export function EventFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             >
               Cancel
             </button>

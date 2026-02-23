@@ -34,23 +34,23 @@ export function TodoSidebar({
   const completedCount = dayTodos.filter((t) => t.completed).length;
 
   return (
-    <div className="w-72 shrink-0 border-l border-gray-200 flex flex-col bg-white h-full overflow-hidden">
+    <div className="w-72 shrink-0 border-l border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-900 h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <ListTodo className="w-4 h-4 text-blue-500 shrink-0" />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-800 truncate">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
               To-Do List
             </p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-400 dark:text-gray-500">
               {format(selectedDay, "EEEE, MMMM d")}
             </p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 shrink-0"
+          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 dark:text-gray-500 shrink-0"
           aria-label="Close sidebar"
         >
           <X className="w-4 h-4" />
@@ -64,11 +64,11 @@ export function TodoSidebar({
             {/* Progress */}
             {dayTodos.length > 1 && (
               <div className="mb-2">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mb-1">
                   <span>{completedCount} of {dayTodos.length} done</span>
                   <span>{Math.round((completedCount / dayTodos.length) * 100)}%</span>
                 </div>
-                <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                <div className="w-full h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-blue-500 rounded-full transition-all"
                     style={{
@@ -90,17 +90,17 @@ export function TodoSidebar({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-32 text-center">
-            <p className="text-sm text-gray-400">No tasks for this day</p>
-            <p className="text-xs text-gray-300 mt-1">Click below to add one</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">No tasks for this day</p>
+            <p className="text-xs text-gray-300 dark:text-gray-600 mt-1">Click below to add one</p>
           </div>
         )}
       </div>
 
       {/* Add task button */}
-      <div className="px-3 py-3 border-t border-gray-100 shrink-0">
+      <div className="px-3 py-3 border-t border-gray-100 dark:border-gray-700/50 shrink-0">
         <button
           onClick={() => setShowModal(true)}
-          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-blue-500 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
         >
           + Add Task
         </button>

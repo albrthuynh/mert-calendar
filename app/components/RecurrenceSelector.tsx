@@ -12,7 +12,7 @@ export function RecurrenceSelector({ value, onChange }: RecurrenceSelectorProps)
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
     >
       {RECURRENCE_OPTIONS.map((opt) => (
         <option key={opt.value} value={opt.value}>

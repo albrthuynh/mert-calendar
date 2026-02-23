@@ -191,32 +191,32 @@ export function WeekView() {
   const weekLabel = getWeekLabel(weekStart, weekEnd);
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-white min-h-0">
+    <div className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0">
       {/* Week navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <button
           onClick={goToToday}
-          className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
         >
           Today
         </button>
         <div className="flex items-center gap-0.5">
           <button
             onClick={goToPrevWeek}
-            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Previous week"
           >
-            <ChevronLeft className="w-4 h-4 text-gray-600" />
+            <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={goToNextWeek}
-            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Next week"
           >
-            <ChevronRight className="w-4 h-4 text-gray-600" />
+            <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
-        <h2 className="text-base font-semibold text-gray-800">{weekLabel}</h2>
+        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">{weekLabel}</h2>
         <div className="ml-auto flex items-center gap-2">
           {loadingEvents && (
             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -233,8 +233,8 @@ export function WeekView() {
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               showSidebar
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                : "text-gray-500 hover:bg-gray-100"
+                ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
             }`}
             aria-label="Toggle to-do sidebar"
           >
@@ -251,7 +251,7 @@ export function WeekView() {
       <div className="flex flex-col flex-1 overflow-hidden">
 
       {/* Day headers + todo sections */}
-      <div className="flex border-b border-gray-200 bg-white shrink-0">
+      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
         {/* Time gutter spacer */}
         <div className="w-14 shrink-0 flex flex-col">
           <div className="h-[60px]" />
@@ -263,7 +263,7 @@ export function WeekView() {
           return (
             <div
               key={day.toISOString()}
-              className="flex-1 flex flex-col border-l border-gray-200 min-w-0"
+              className="flex-1 flex flex-col border-l border-gray-200 dark:border-gray-700 min-w-0"
             >
               {/* Date header — click to open/toggle todo sidebar */}
               <button
@@ -276,11 +276,11 @@ export function WeekView() {
                     setShowSidebar(true);
                   }
                 }}
-                className="flex flex-col items-center py-2 h-[60px] justify-center w-full hover:bg-gray-50 transition-colors"
+                className="flex flex-col items-center py-2 h-[60px] justify-center w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <span
                   className={`text-xs font-medium uppercase tracking-wider ${
-                    today ? "text-blue-500" : isSelected ? "text-blue-400" : "text-gray-400"
+                    today ? "text-blue-500" : isSelected ? "text-blue-400" : "text-gray-400 dark:text-gray-500"
                   }`}
                 >
                   {format(day, "EEE")}
@@ -290,8 +290,8 @@ export function WeekView() {
                     today
                       ? "bg-blue-500 text-white"
                       : isSelected
-                      ? "bg-blue-100 text-blue-600"
-                      : "text-gray-700 hover:bg-gray-100"
+                      ? "bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400"
+                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   {format(day, "d")}

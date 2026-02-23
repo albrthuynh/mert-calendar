@@ -128,11 +128,11 @@ export function TimeGrid({
         {/* Time labels */}
         <div className="w-14 shrink-0 relative select-none">
           {HOURS.map((hour) => (
-            <div
-              key={hour}
-              className="absolute right-2 text-xs text-gray-400 leading-none"
-              style={{ top: `${hour * HOUR_HEIGHT - 7}px` }}
-            >
+        <div
+            key={hour}
+            className="absolute right-2 text-xs text-gray-400 dark:text-gray-600 leading-none"
+            style={{ top: `${hour * HOUR_HEIGHT - 7}px` }}
+          >
               {hourLabel(hour)}
             </div>
           ))}
@@ -149,14 +149,14 @@ export function TimeGrid({
           return (
             <div
               key={day.toISOString()}
-              className="flex-1 border-l border-gray-200 relative cursor-pointer"
+              className="flex-1 border-l border-gray-200 dark:border-gray-700 relative cursor-pointer"
               onClick={(e) => handleColumnClick(e, day)}
             >
               {/* Hour grid lines */}
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="absolute left-0 right-0 border-t border-gray-100"
+                  className="absolute left-0 right-0 border-t border-gray-100 dark:border-gray-800"
                   style={{ top: `${hour * HOUR_HEIGHT}px` }}
                 />
               ))}
@@ -165,7 +165,7 @@ export function TimeGrid({
               {HOURS.map((hour) => (
                 <div
                   key={`h-${hour}`}
-                  className="absolute left-0 right-0 border-t border-gray-50"
+                  className="absolute left-0 right-0 border-t border-gray-50 dark:border-gray-800/50"
                   style={{
                     top: `${hour * HOUR_HEIGHT + HOUR_HEIGHT / 2}px`,
                   }}

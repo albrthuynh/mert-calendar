@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #111827;
+}
+
+.dark {
+  --background: #111827;
+  --foreground: #f9fafb;
 }
 
 @theme inline {
@@ -15,6 +22,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 * {
@@ -31,4 +39,7 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background-color: #d1d5db;
   border-radius: 3px;
+}
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #374151;
 }

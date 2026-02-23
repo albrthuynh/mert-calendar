@@ -58,7 +58,7 @@ export function EventDetailPopover({
   return (
     <div
       ref={ref}
-      className="fixed z-50 bg-white rounded-xl shadow-2xl border border-gray-200 w-72 overflow-hidden"
+      className="fixed z-50 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-72 overflow-hidden"
       style={{ top, left }}
     >
       {/* Color bar + close */}
@@ -68,27 +68,27 @@ export function EventDetailPopover({
       />
       <div className="px-4 pt-3 pb-4">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <h3 className="font-semibold text-gray-900 text-sm leading-tight">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm leading-tight">
             {event.title}
           </h3>
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={onEdit}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               title="Edit"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={onDelete}
-              className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
+              className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
               title="Delete"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               title="Close"
             >
               <X className="w-3.5 h-3.5" />
@@ -97,7 +97,7 @@ export function EventDetailPopover({
         </div>
 
         {/* Time */}
-        <div className="text-xs text-gray-600 mb-2">
+        <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
           <span>{format(start, "EEEE, MMMM d")}</span>
           <br />
           <span>
@@ -107,7 +107,7 @@ export function EventDetailPopover({
 
         {/* Recurrence */}
         {event.recurrenceRule && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-2">
             <RotateCcw className="w-3 h-3" />
             <span>{getRecurrenceLabel(event.recurrenceRule)}</span>
             {event.recurrenceEndDate && (
@@ -121,7 +121,7 @@ export function EventDetailPopover({
 
         {/* Description */}
         {event.description && (
-          <p className="text-xs text-gray-600 mt-2 leading-relaxed border-t border-gray-100 pt-2">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 leading-relaxed border-t border-gray-100 dark:border-gray-700/50 pt-2">
             {event.description}
           </p>
         )}
