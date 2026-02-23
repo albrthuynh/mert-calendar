@@ -221,12 +221,28 @@ export function WeekView() {
           {loadingEvents && (
             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           )}
-          {showSidebar && selectedDay && (
-            <div className="flex items-center gap-1.5 text-xs text-blue-600 font-medium">
-              <ListTodo className="w-3.5 h-3.5" />
-              {format(selectedDay, "EEE, MMM d")}
-            </div>
-          )}
+          <button
+            onClick={() => {
+              if (showSidebar) {
+                setShowSidebar(false);
+                setSelectedDay(null);
+              } else {
+                setSelectedDay((prev) => prev ?? new Date());
+                setShowSidebar(true);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              showSidebar
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+            aria-label="Toggle to-do sidebar"
+          >
+            <ListTodo className="w-4 h-4" />
+            {showSidebar && selectedDay
+              ? format(selectedDay, "EEE, MMM d")
+              : "Tasks"}
+          </button>
         </div>
       </div>
 
