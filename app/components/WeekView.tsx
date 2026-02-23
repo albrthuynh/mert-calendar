@@ -40,7 +40,9 @@ export function WeekView({ onViewChange }: WeekViewProps = {}) {
   const [weekStart, setWeekStart] = useState<Date>(() =>
     startOfWeek(new Date(), { weekStartsOn: 0 })
   );
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  // Initialize currentTime on the client after mount to avoid
+  // server/client time mismatches affecting the red line position.
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -58,6 +60,8 @@ export function WeekView({ onViewChange }: WeekViewProps = {}) {
 
   // Live clock
   useEffect(() => {
+    // Set immediately on mount, then update every minute
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 60_000);
     return () => clearInterval(interval);
   }, []);
@@ -321,14 +325,16 @@ export function WeekView({ onViewChange }: WeekViewProps = {}) {
       </div>
 
       {/* Time grid */}
-      <TimeGrid
-        scrollRef={scrollRef}
-        weekDays={weekDays}
-        currentTime={currentTime}
-        events={events}
-        onSlotClick={handleSlotClick}
-        onEventClick={handleEventClick}
-      />
+      {currentTime && (
+        <TimeGrid
+          scrollRef={scrollRef}
+          weekDays={weekDays}
+          currentTime={currentTime}
+          events={events}
+          onSlotClick={handleSlotClick}
+          onEventClick={handleEventClick}
+        />
+      )}
 
       </div>{/* end calendar column */}
 

@@ -89,7 +89,7 @@ function layoutEvents(events: CalendarEvent[]): Array<{
 interface TimeGridProps {
   scrollRef: RefObject<HTMLDivElement | null>;
   weekDays: Date[];
-  currentTime: Date;
+  currentTime: Date | null;
   events: CalendarEvent[];
   onSlotClick: (date: Date) => void;
   onEventClick: (event: CalendarEvent, rect: DOMRect) => void;
@@ -104,8 +104,10 @@ export function TimeGrid({
   onEventClick,
 }: TimeGridProps) {
   const currentTimeTop =
-    ((currentTime.getHours() * 60 + currentTime.getMinutes()) / 60) *
-    HOUR_HEIGHT;
+    currentTime === null
+      ? null
+      : ((currentTime.getHours() * 60 + currentTime.getMinutes()) / 60) *
+        HOUR_HEIGHT;
 
   const handleColumnClick = (e: React.MouseEvent<HTMLDivElement>, day: Date) => {
     if ((e.target as HTMLElement).closest("[data-event]")) return;
@@ -186,7 +188,7 @@ export function TimeGrid({
               ))}
 
               {/* Current time indicator (today only) */}
-              {today && (
+              {today && currentTimeTop !== null && (
                 <div
                   className="absolute left-0 right-0 z-20 pointer-events-none"
                   style={{ top: `${currentTimeTop}px` }}
