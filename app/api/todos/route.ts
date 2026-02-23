@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { startOfDay, endOfDay } from "date-fns";
+import { addDays } from "date-fns";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
     where: {
       userId: session.user.id,
       taskDate: {
-        gte: startOfDay(new Date(start)),
-        lte: endOfDay(new Date(end)),
+        gte: new Date(start),
+        lte: new Date(end),
       },
     },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -50,15 +50,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const taskDateObj = startOfDay(new Date(taskDate));
+  // taskDate is sent from the client as an ISO instant representing local midnight.
+  // Keep that exact instant to avoid server-timezone shifts in production.
+  const taskDateObj = new Date(taskDate);
+  const nextDay = addDays(taskDateObj, 1);
 
   // Find highest order for that day to append at end
   const existing = await prisma.todo.findMany({
     where: {
       userId: session.user.id,
       taskDate: {
-        gte: startOfDay(taskDateObj),
-        lte: endOfDay(taskDateObj),
+        gte: taskDateObj,
+        lt: nextDay,
       },
     },
     orderBy: { order: "desc" },
