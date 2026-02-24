@@ -47,11 +47,11 @@ export function TodoItem({
   };
 
   return (
-    <div className="group flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+    <div className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
       {/* Checkbox */}
       <button
         onClick={() => onToggle(todo.id, !todo.completed)}
-        className="shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
+        className="mt-0.5 shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
         style={{
           borderColor: todo.completed ? "#4285F4" : "#d1d5db",
           backgroundColor: todo.completed ? "#4285F4" : "transparent",
@@ -71,7 +71,7 @@ export function TodoItem({
         )}
       </button>
 
-      {/* Title */}
+      {/* Title + optional description */}
       <div className="flex-1 min-w-0">
         {editing ? (
           <input
@@ -92,28 +92,35 @@ export function TodoItem({
             }`}
           />
         ) : (
-          <span
-            onDoubleClick={() => setEditing(true)}
-            className={`block cursor-default select-none ${
-              variant === "sidebar" ? "text-sm break-words" : "text-xs truncate"
-            } ${
-              todo.completed
-                ? "line-through text-gray-400 dark:text-gray-600"
-                : isOverdue
-                ? "text-red-600 dark:text-red-400"
-                : "text-gray-700 dark:text-gray-300"
-            }`}
-            title={todo.title}
-          >
-            {todo.title}
-          </span>
+          <>
+            <span
+              onDoubleClick={() => setEditing(true)}
+              className={`block cursor-default select-none ${
+                variant === "sidebar" ? "text-sm wrap-break-word" : "text-xs truncate"
+              } ${
+                todo.completed
+                  ? "line-through text-gray-400 dark:text-gray-600"
+                  : isOverdue
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-gray-700 dark:text-gray-300"
+              }`}
+              title={todo.title}
+            >
+              {todo.title}
+            </span>
+            {variant === "sidebar" && todo.description && (
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500 whitespace-pre-wrap wrap-break-word max-h-12 overflow-hidden">
+                {todo.description}
+              </p>
+            )}
+          </>
         )}
       </div>
 
       {/* Due time badge (only if set) */}
       {!editing && dueDate && (
         <span
-          className={`flex items-center gap-0.5 text-xs shrink-0 tabular-nums ${
+          className={`mt-0.5 flex items-center gap-0.5 text-xs shrink-0 tabular-nums ${
             isOverdue ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-gray-500"
           }`}
         >
@@ -126,7 +133,7 @@ export function TodoItem({
       {!editing && (
         <button
           onClick={() => setShowDetailsModal(true)}
-          className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+          className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
           aria-label="Edit to-do details"
         >
           <Pencil className="w-3 h-3" />
@@ -136,7 +143,7 @@ export function TodoItem({
       {/* Delete button */}
       <button
         onClick={() => onDelete(todo.id)}
-        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all"
+        className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all"
         aria-label="Delete"
       >
         <Trash2 className="w-3 h-3" />
