@@ -339,6 +339,10 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     });
   }, []);
 
+  const handleTodoUpdate = useCallback((updated: Todo) => {
+    setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  }, []);
+
   const weekLabel = getWeekLabel(weekStart, weekEnd);
 
   const containerStyle = backgroundUrl
@@ -471,6 +475,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                 onToggle={handleTodoToggle}
                 onDelete={handleTodoDelete}
                 onEdit={handleTodoEdit}
+                onUpdate={handleTodoUpdate}
               />
             </div>
           );
@@ -504,6 +509,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           onToggle={handleTodoToggle}
           onDelete={handleTodoDelete}
           onEdit={handleTodoEdit}
+          onUpdate={handleTodoUpdate}
         />
       )}
       </div>{/* end calendar + sidebar wrapper */}

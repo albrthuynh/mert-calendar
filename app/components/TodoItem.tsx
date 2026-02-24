@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { format, isPast, isToday } from "date-fns";
-import { Trash2, Clock } from "lucide-react";
+import { Trash2, Clock, Pencil } from "lucide-react";
 import { Todo } from "@/types/calendar";
+import { TodoFormModal } from "./TodoFormModal";
 
 interface TodoItemProps {
   todo: Todo;
@@ -11,6 +12,7 @@ interface TodoItemProps {
   onDelete: (id: string) => void;
   onEdit: (id: string, title: string) => void;
   variant?: "embedded" | "sidebar";
+  onUpdate: (todo: Todo) => void;
 }
 
 export function TodoItem({
@@ -19,9 +21,11 @@ export function TodoItem({
   onDelete,
   onEdit,
   variant = "embedded",
+  onUpdate,
 }: TodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(todo.title);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -118,6 +122,17 @@ export function TodoItem({
         </span>
       )}
 
+      {/* Edit details button (pencil) */}
+      {!editing && (
+        <button
+          onClick={() => setShowDetailsModal(true)}
+          className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+          aria-label="Edit to-do details"
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+      )}
+
       {/* Delete button */}
       <button
         onClick={() => onDelete(todo.id)}
@@ -126,6 +141,18 @@ export function TodoItem({
       >
         <Trash2 className="w-3 h-3" />
       </button>
+
+      {showDetailsModal && (
+        <TodoFormModal
+          initialDate={new Date(todo.taskDate)}
+          todo={todo}
+          onClose={() => setShowDetailsModal(false)}
+          onSave={(updated) => {
+            onUpdate(updated);
+            setShowDetailsModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

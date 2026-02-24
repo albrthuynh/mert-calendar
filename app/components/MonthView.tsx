@@ -251,6 +251,10 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     });
   }, []);
 
+  const handleTodoUpdate = useCallback((updated: Todo) => {
+    setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  }, []);
+
   // ── Derived data ──────────────────────────────────────────
 
   const weeks: Date[][] = [];
@@ -455,6 +459,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
             onToggle={handleTodoToggle}
             onDelete={handleTodoDelete}
             onEdit={handleTodoEdit}
+            onUpdate={handleTodoUpdate}
           />
         )}
       </div>

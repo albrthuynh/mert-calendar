@@ -15,6 +15,7 @@ interface TodoSidebarProps {
   onToggle: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string, title: string) => void;
+   onUpdate: (todo: Todo) => void;
 }
 
 export function TodoSidebar({
@@ -25,6 +26,7 @@ export function TodoSidebar({
   onToggle,
   onDelete,
   onEdit,
+  onUpdate,
 }: TodoSidebarProps) {
   const [showModal, setShowModal] = useState(false);
 
@@ -86,6 +88,7 @@ export function TodoSidebar({
                 onDelete={onDelete}
                 onEdit={onEdit}
                 variant="sidebar"
+                onUpdate={onUpdate}
               />
             ))}
           </div>

@@ -14,6 +14,7 @@ interface TodoSectionProps {
   onToggle: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string, title: string) => void;
+  onUpdate: (todo: Todo) => void;
 }
 
 export function TodoSection({
@@ -23,6 +24,7 @@ export function TodoSection({
   onToggle,
   onDelete,
   onEdit,
+  onUpdate,
 }: TodoSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -73,6 +75,7 @@ export function TodoSection({
               onToggle={onToggle}
               onDelete={onDelete}
               onEdit={onEdit}
+              onUpdate={onUpdate}
             />
           ))}
         </div>
