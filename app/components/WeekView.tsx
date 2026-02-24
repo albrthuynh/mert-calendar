@@ -309,13 +309,22 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       const next = prev.map((t) =>
         t.id === id ? { ...t, completed } : t
       );
-      if (
-        completed &&
-        next.length > 0 &&
-        next.every((t) => t.completed)
-      ) {
-        queueMicrotask(() => fireCelebrationConfetti());
+
+      if (completed) {
+        const toggled = next.find((t) => t.id === id);
+        if (toggled) {
+          const dayTodos = next.filter((t) =>
+            isSameDay(new Date(t.taskDate), new Date(toggled.taskDate))
+          );
+          if (
+            dayTodos.length > 0 &&
+            dayTodos.every((t) => t.completed)
+          ) {
+            queueMicrotask(() => fireCelebrationConfetti());
+          }
+        }
       }
+
       return next;
     });
     await fetch(`/api/todos/${id}`, {
