@@ -20,6 +20,7 @@ import { EventDetailPopover } from "./EventDetailPopover";
 import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
 import { CalendarEvent, Todo } from "@/types/calendar";
+import { fireCelebrationConfetti } from "@/lib/confetti";
 
 const MAX_VISIBLE_EVENTS = 3;
 
@@ -176,9 +177,19 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
 
   const handleTodoToggle = useCallback(
     async (id: string, completed: boolean) => {
-      setTodos((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, completed } : t))
-      );
+      setTodos((prev) => {
+        const next = prev.map((t) =>
+          t.id === id ? { ...t, completed } : t
+        );
+        if (
+          completed &&
+          next.length > 0 &&
+          next.every((t) => t.completed)
+        ) {
+          queueMicrotask(() => fireCelebrationConfetti());
+        }
+        return next;
+      });
       await fetch(`/api/todos/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

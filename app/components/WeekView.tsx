@@ -20,6 +20,7 @@ import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
 import { CalendarEvent, Todo } from "@/types/calendar";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
+import { fireCelebrationConfetti } from "@/lib/confetti";
 
 export { HOUR_HEIGHT };
 
@@ -181,10 +182,19 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   }, []);
 
   const handleTodoToggle = useCallback(async (id: string, completed: boolean) => {
-    // Optimistic update
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed } : t))
-    );
+    setTodos((prev) => {
+      const next = prev.map((t) =>
+        t.id === id ? { ...t, completed } : t
+      );
+      if (
+        completed &&
+        next.length > 0 &&
+        next.every((t) => t.completed)
+      ) {
+        queueMicrotask(() => fireCelebrationConfetti());
+      }
+      return next;
+    });
     await fetch(`/api/todos/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
