@@ -352,6 +352,18 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   }, []);
 
+  const handleTodoMoveDay = useCallback(async (id: string, day: Date) => {
+    const newDateIso = day.toISOString();
+    setTodos((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, taskDate: newDateIso } : t))
+    );
+    await fetch(`/api/todos/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskDate: newDateIso }),
+    });
+  }, []);
+
   const weekLabel = getWeekLabel(weekStart, weekEnd);
 
   const containerStyle = backgroundUrl
@@ -485,6 +497,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                 onDelete={handleTodoDelete}
                 onEdit={handleTodoEdit}
                 onUpdate={handleTodoUpdate}
+                onMoveDay={handleTodoMoveDay}
               />
             </div>
           );

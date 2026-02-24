@@ -46,8 +46,18 @@ export function TodoItem({
     setEditing(false);
   };
 
+  const isEmbedded = variant === "embedded";
+
   return (
-    <div className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+    <div
+      className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+      draggable={isEmbedded}
+      onDragStart={(e) => {
+        if (!isEmbedded) return;
+        e.dataTransfer.setData("text/plain", todo.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+    >
       {/* Checkbox */}
       <button
         onClick={() => onToggle(todo.id, !todo.completed)}

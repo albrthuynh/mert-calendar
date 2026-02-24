@@ -15,6 +15,7 @@ interface TodoSectionProps {
   onDelete: (id: string) => void;
   onEdit: (id: string, title: string) => void;
   onUpdate: (todo: Todo) => void;
+  onMoveDay: (id: string, day: Date) => void;
 }
 
 export function TodoSection({
@@ -25,6 +26,7 @@ export function TodoSection({
   onDelete,
   onEdit,
   onUpdate,
+  onMoveDay,
 }: TodoSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -33,8 +35,19 @@ export function TodoSection({
   const completedCount = dayTodos.filter((t) => t.completed).length;
   const hasAny = dayTodos.length > 0;
 
+  const handleDrop: React.DragEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain");
+    if (!id) return;
+    onMoveDay(id, day);
+  };
+
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+    <div
+      className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
+    >
       {/* Section header */}
       <div className="flex items-center px-1 py-0.5 gap-1">
         {hasAny && (
