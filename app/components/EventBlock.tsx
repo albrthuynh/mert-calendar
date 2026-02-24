@@ -11,6 +11,9 @@ interface EventBlockProps {
   columnIndex: number;
   totalColumns: number;
   onClick: (event: CalendarEvent, rect: DOMRect) => void;
+  /** Override displayed position/size during drag preview */
+  overrideStart?: Date;
+  overrideEnd?: Date;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -24,15 +27,19 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
     : null;
 }
 
+const RESIZE_HANDLE_HEIGHT = 8;
+
 export function EventBlock({
   event,
   dayStart,
   columnIndex,
   totalColumns,
   onClick,
+  overrideStart,
+  overrideEnd,
 }: EventBlockProps) {
-  const start = new Date(event.startTime);
-  const end = new Date(event.endTime);
+  const start = overrideStart ?? new Date(event.startTime);
+  const end = overrideEnd ?? new Date(event.endTime);
 
   // Minutes since midnight of this day
   const startOfDay = new Date(dayStart);
@@ -56,6 +63,7 @@ export function EventBlock({
   const borderColor = event.color;
 
   const isShort = height < 40;
+  const canResizeOrMove = !event.isRecurringInstance && !event.recurrenceRule;
 
   return (
     <div
@@ -74,6 +82,15 @@ export function EventBlock({
         onClick(event, e.currentTarget.getBoundingClientRect());
       }}
     >
+      {/* Top resize handle - hit area for TimeGrid to detect */}
+      {canResizeOrMove && height > RESIZE_HANDLE_HEIGHT * 2 && (
+        <div
+          data-resize="start"
+          className="absolute left-0 right-0 top-0 cursor-n-resize z-10"
+          style={{ height: RESIZE_HANDLE_HEIGHT }}
+        />
+      )}
+
       <p
         className="text-xs font-semibold leading-tight truncate"
         style={{ color: event.color }}
@@ -87,6 +104,15 @@ export function EventBlock({
             <RotateCcw className="inline w-2.5 h-2.5 ml-0.5 opacity-60" />
           )}
         </p>
+      )}
+
+      {/* Bottom resize handle */}
+      {canResizeOrMove && height > RESIZE_HANDLE_HEIGHT * 2 && (
+        <div
+          data-resize="end"
+          className="absolute left-0 right-0 bottom-0 cursor-n-resize z-10"
+          style={{ height: RESIZE_HANDLE_HEIGHT }}
+        />
       )}
     </div>
   );

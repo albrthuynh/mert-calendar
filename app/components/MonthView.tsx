@@ -169,6 +169,44 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     setPopoverEvent(null);
   }, [popoverEvent]);
 
+  const handleEventMoveTime = useCallback(
+    async (event: CalendarEvent, deltaMinutes: number) => {
+      const newStart = new Date(
+        new Date(event.startTime).getTime() + deltaMinutes * 60 * 1000
+      );
+      const newEnd = new Date(
+        new Date(event.endTime).getTime() + deltaMinutes * 60 * 1000
+      );
+      const res = await fetch(`/api/events/${event.originalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+        }),
+      });
+      if (res.ok) {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.originalId === event.originalId && e.startTime === event.startTime
+              ? { ...e, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+              : e
+          )
+        );
+        setPopoverEvent((prev) =>
+          prev && prev.originalId === event.originalId && prev.startTime === event.startTime
+            ? { ...prev, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+            : prev
+        );
+        const start = visibleStart.toISOString();
+        const end = visibleEnd.toISOString();
+        const eventsRes = await fetch(`/api/events?start=${start}&end=${end}`);
+        if (eventsRes.ok) setEvents(await eventsRes.json());
+      }
+    },
+    [visibleStart, visibleEnd]
+  );
+
   // ── Todo handlers ──────────────────────────────────────────
 
   const handleTodoAdd = useCallback((todo: Todo) => {
@@ -459,6 +497,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
           onDelete={handleDeleteEvent}
+          onMoveTime={handleEventMoveTime}
         />
       )}
     </div>

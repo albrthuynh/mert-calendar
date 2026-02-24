@@ -11,6 +11,8 @@ interface EventDetailPopoverProps {
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Shift event time by delta minutes (positive = later). Only for non-recurring. */
+  onMoveTime?: (event: CalendarEvent, deltaMinutes: number) => void;
 }
 
 function getRecurrenceLabel(rule: string): string {
@@ -18,12 +20,15 @@ function getRecurrenceLabel(rule: string): string {
   return match ? match.label : rule;
 }
 
+const MOVE_STEP_MINUTES = 30;
+
 export function EventDetailPopover({
   event,
   anchorRect,
   onClose,
   onEdit,
   onDelete,
+  onMoveTime,
 }: EventDetailPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -39,7 +44,22 @@ export function EventDetailPopover({
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (onMoveTime && !event.isRecurringInstance && !event.recurrenceRule) {
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          onMoveTime(event, -MOVE_STEP_MINUTES);
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          onMoveTime(event, MOVE_STEP_MINUTES);
+          return;
+        }
+      }
     };
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -50,7 +70,7 @@ export function EventDetailPopover({
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("mousedown", handleClick);
     };
-  }, [onClose]);
+  }, [onClose, onMoveTime, event]);
 
   const start = new Date(event.startTime);
   const end = new Date(event.endTime);

@@ -141,6 +141,91 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     []
   );
 
+  const handleSlotDragCreate = useCallback(
+    async (start: Date, end: Date) => {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "New event",
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+          color: "#4285F4",
+          allDay: false,
+        }),
+      });
+      if (res.ok) {
+        const rangeStart = weekStart.toISOString();
+        const rangeEnd = weekEnd.toISOString();
+        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
+        if (eventsRes.ok) setEvents(await eventsRes.json());
+      }
+    },
+    [weekStart, weekEnd]
+  );
+
+  const handleEventResize = useCallback(
+    async (event: CalendarEvent, startTime: Date, endTime: Date) => {
+      const res = await fetch(`/api/events/${event.originalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        }),
+      });
+      if (res.ok) {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.originalId === event.originalId && e.startTime === event.startTime
+              ? {
+                  ...e,
+                  startTime: startTime.toISOString(),
+                  endTime: endTime.toISOString(),
+                }
+              : e
+          )
+        );
+        const rangeStart = weekStart.toISOString();
+        const rangeEnd = weekEnd.toISOString();
+        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
+        if (eventsRes.ok) setEvents(await eventsRes.json());
+      }
+    },
+    [weekStart, weekEnd]
+  );
+
+  const handleEventMove = useCallback(
+    async (event: CalendarEvent, startTime: Date, endTime: Date) => {
+      const res = await fetch(`/api/events/${event.originalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        }),
+      });
+      if (res.ok) {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.originalId === event.originalId && e.startTime === event.startTime
+              ? {
+                  ...e,
+                  startTime: startTime.toISOString(),
+                  endTime: endTime.toISOString(),
+                }
+              : e
+          )
+        );
+        const rangeStart = weekStart.toISOString();
+        const rangeEnd = weekEnd.toISOString();
+        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
+        if (eventsRes.ok) setEvents(await eventsRes.json());
+      }
+    },
+    [weekStart, weekEnd]
+  );
+
   const refreshEvents = useCallback(async () => {
     const start = weekStart.toISOString();
     const end = weekEnd.toISOString();
@@ -175,6 +260,44 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     setShowEventModal(true);
     setPopoverEvent(null);
   }, [popoverEvent]);
+
+  const handleEventMoveTime = useCallback(
+    async (event: CalendarEvent, deltaMinutes: number) => {
+      const newStart = new Date(
+        new Date(event.startTime).getTime() + deltaMinutes * 60 * 1000
+      );
+      const newEnd = new Date(
+        new Date(event.endTime).getTime() + deltaMinutes * 60 * 1000
+      );
+      const res = await fetch(`/api/events/${event.originalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+        }),
+      });
+      if (res.ok) {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.originalId === event.originalId && e.startTime === event.startTime
+              ? { ...e, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+              : e
+          )
+        );
+        setPopoverEvent((prev) =>
+          prev && prev.originalId === event.originalId && prev.startTime === event.startTime
+            ? { ...prev, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+            : prev
+        );
+        const rangeStart = weekStart.toISOString();
+        const rangeEnd = weekEnd.toISOString();
+        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
+        if (eventsRes.ok) setEvents(await eventsRes.json());
+      }
+    },
+    [weekStart, weekEnd]
+  );
 
   // ── Todo handlers ──────────────────────────────────────────
   const handleTodoAdd = useCallback((todo: Todo) => {
@@ -363,6 +486,9 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           events={events}
           onSlotClick={handleSlotClick}
           onEventClick={handleEventClick}
+          onSlotDragCreate={handleSlotDragCreate}
+          onEventResize={handleEventResize}
+          onEventMove={handleEventMove}
         />
       )}
 
@@ -404,6 +530,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
           onDelete={handleDeleteEvent}
+          onMoveTime={handleEventMoveTime}
         />
       )}
     </div>
