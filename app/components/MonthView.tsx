@@ -29,7 +29,35 @@ interface MonthViewProps {
 
 function getCalendarDays(monthStart: Date): Date[] {
   const start = startOfWeek(monthStart, { weekStartsOn: 0 });
-  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+
+  const days: Date[] = [];
+  let currentWeekStart = start;
+  let hasSeenMonthDay = false;
+  let addedTrailingWeek = false;
+
+  while (true) {
+    const weekDays = Array.from({ length: 7 }, (_, i) =>
+      addDays(currentWeekStart, i)
+    );
+    const weekHasMonthDay = weekDays.some((day) =>
+      isSameMonth(day, monthStart)
+    );
+
+    if (weekHasMonthDay) {
+      days.push(...weekDays);
+      hasSeenMonthDay = true;
+    } else if (hasSeenMonthDay && !addedTrailingWeek) {
+      // Allow a single trailing week that spills into the next month
+      days.push(...weekDays);
+      addedTrailingWeek = true;
+    } else {
+      break;
+    }
+
+    currentWeekStart = addDays(currentWeekStart, 7);
+  }
+
+  return days;
 }
 
 function getEventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
@@ -359,7 +387,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
           </div>
 
           {/* Month grid */}
-          <div className="flex-1 grid grid-rows-6 overflow-hidden min-h-0">
+          <div className="flex-1 grid auto-rows-fr overflow-hidden min-h-0">
             {weeks.map((week, weekIdx) => (
               <div
                 key={weekIdx}
