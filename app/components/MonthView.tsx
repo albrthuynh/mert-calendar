@@ -22,8 +22,6 @@ import { ViewToggle, type ViewMode } from "./ViewToggle";
 import { CalendarEvent, Todo } from "@/types/calendar";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 
-const MAX_VISIBLE_EVENTS = 3;
-
 interface MonthViewProps {
   onViewChange: (view: ViewMode) => void;
   backgroundUrl?: string;
@@ -365,8 +363,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                   const incompleteTodos = dayTodos.filter(
                     (t) => !t.completed
                   ).length;
-                  const visibleEvents = dayEvents.slice(0, MAX_VISIBLE_EVENTS);
-                  const moreCount = dayEvents.length - MAX_VISIBLE_EVENTS;
 
                   return (
                     <div
@@ -414,8 +410,8 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                       </div>
 
                       {/* Events */}
-                      <div className="flex-1 px-1 pb-0.5 space-y-px mt-0.5 overflow-hidden">
-                        {visibleEvents.map((event) => (
+                      <div className="flex-1 px-1 pb-0.5 space-y-px mt-0.5 overflow-y-auto min-h-0">
+                        {dayEvents.map((event) => (
                           <button
                             key={event.id}
                             onClick={(e) => {
@@ -437,18 +433,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                               : `${format(new Date(event.startTime), "h:mm")} – ${format(new Date(event.endTime), "h:mm")} ${event.title}`}
                           </button>
                         ))}
-                        {moreCount > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedDay(day);
-                              setShowSidebar(true);
-                            }}
-                            className="text-[11px] text-gray-500 dark:text-gray-400 px-1.5 font-medium hover:text-gray-700 dark:hover:text-gray-300 w-full text-left"
-                          >
-                            +{moreCount} more
-                          </button>
-                        )}
                       </div>
                     </div>
                   );
