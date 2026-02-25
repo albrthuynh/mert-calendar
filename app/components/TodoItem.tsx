@@ -50,7 +50,7 @@ export function TodoItem({
 
   return (
     <div
-      className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+      className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-full"
       draggable={isEmbedded}
       onDragStart={(e) => {
         if (!isEmbedded) return;

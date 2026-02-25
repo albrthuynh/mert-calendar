@@ -376,7 +376,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
 
   return (
     <div
-      className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0"
+      className="flex flex-col flex-1 min-w-0 overflow-hidden bg-white dark:bg-gray-900 min-h-0"
       style={containerStyle}
     >
       {/* Week navigation */}
@@ -437,11 +437,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       </div>
 
       {/* Calendar + optional sidebar */}
-      <div className="flex flex-1 overflow-hidden bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
 
       {/* Day headers + todo sections */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+      <div className="flex min-w-0 overflow-x-hidden border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
         {/* Time gutter spacer */}
         <div className="w-14 shrink-0 flex flex-col">
           <div className="h-[60px]" />

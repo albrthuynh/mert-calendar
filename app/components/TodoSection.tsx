@@ -44,7 +44,7 @@ export function TodoSection({
 
   return (
     <div
-      className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"
+      className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 w-full overflow-x-hidden"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
@@ -80,7 +80,7 @@ export function TodoSection({
 
       {/* Todo list */}
       {!collapsed && hasAny && (
-        <div className="px-1 pb-1 flex flex-col gap-0.5 max-h-36 overflow-y-auto">
+        <div className="px-1 pb-1 flex flex-col gap-0.5 max-h-36 overflow-y-auto overflow-x-hidden w-full">
           {dayTodos.map((todo) => (
             <TodoItem
               key={todo.id}

@@ -12,9 +12,9 @@ export function CalendarView() {
   const { backgroundUrl } = useCalendarPreferences();
 
   return (
-    <div className="flex-1 flex min-h-0">
+    <div className="flex-1 flex min-h-0 min-w-0">
       {/* Desktop / tablet calendar */}
-      <div className="hidden md:flex flex-1 min-h-0">
+      <div className="hidden md:flex flex-1 min-h-0 min-w-0">
         {view === "month" ? (
           <MonthView
             onViewChange={setView}
@@ -29,7 +29,7 @@ export function CalendarView() {
       </div>
 
       {/* Mobile day view */}
-      <div className="flex md:hidden flex-1 min-h-0">
+      <div className="flex md:hidden flex-1 min-h-0 min-w-0">
         <MobileDayView backgroundUrl={backgroundUrl ?? undefined} />
       </div>
     </div>
