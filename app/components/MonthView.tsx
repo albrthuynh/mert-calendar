@@ -406,9 +406,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                     : false;
                   const dayEvents = getEventsForDay(events, day);
                   const dayTodos = getTodosForDay(todos, day);
-                  const incompleteTodos = dayTodos.filter(
-                    (t) => !t.completed
-                  ).length;
 
                   return (
                     <div
@@ -424,8 +421,31 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                       } hover:bg-gray-50 dark:hover:bg-gray-800/50`}
                       onClick={() => handleDayClick(day)}
                     >
-                      {/* Day number */}
-                      <div className="flex items-center justify-between px-1.5 pt-1 shrink-0">
+                      {/* Day number + to-dos toggle */}
+                      <div className="flex items-center justify-between gap-1 px-1.5 pt-1 shrink-0">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isSelected && showSidebar) {
+                                setShowSidebar(false);
+                                setSelectedDay(null);
+                              } else {
+                                setSelectedDay(day);
+                                setShowSidebar(true);
+                              }
+                            }}
+                            className={`w-7 h-7 flex items-center justify-center rounded-full text-sm transition-colors shrink-0 ${
+                              today
+                                ? "bg-blue-500 text-white font-semibold"
+                                : inMonth
+                                ? "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium"
+                                : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                            }`}
+                          >
+                            {format(day, "d")}
+                          </button>
+                        </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -437,22 +457,12 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                               setShowSidebar(true);
                             }
                           }}
-                          className={`w-7 h-7 flex items-center justify-center rounded-full text-sm transition-colors ${
-                            today
-                              ? "bg-blue-500 text-white font-semibold"
-                              : inMonth
-                              ? "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium"
-                              : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                          }`}
+                          className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors shrink-0"
+                          aria-label={isSelected && showSidebar ? "Close to-dos" : `View to-dos for ${format(day, "MMMM d")}`}
+                          title={isSelected && showSidebar ? "Close to-dos" : "View to-dos"}
                         >
-                          {format(day, "d")}
+                          <ListTodo className="w-3.5 h-3.5" />
                         </button>
-                        {incompleteTodos > 0 && (
-                          <span
-                            className="w-2 h-2 rounded-full bg-amber-400 dark:bg-amber-500 shrink-0"
-                            title={`${incompleteTodos} todo${incompleteTodos > 1 ? "s" : ""}`}
-                          />
-                        )}
                       </div>
 
                       {/* Events */}
