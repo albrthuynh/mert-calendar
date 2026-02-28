@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { isSameDay } from "date-fns";
+import { useState, useCallback } from "react";
+import { isSameDay, format } from "date-fns";
 import { Plus, ChevronDown, ChevronUp } from "lucide-react";
 import { Todo } from "@/types/calendar";
 import { TodoItem } from "./TodoItem";
@@ -18,6 +18,32 @@ interface TodoSectionProps {
   onMoveDay: (id: string, day: Date) => void;
 }
 
+const TODO_COLLAPSED_STORAGE_KEY = "albert-calendar-todo-collapsed";
+
+function getStoredCollapsed(day: Date): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(TODO_COLLAPSED_STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw) as Record<string, boolean>;
+    return data[format(day, "yyyy-MM-dd")] ?? false;
+  } catch {
+    return false;
+  }
+}
+
+function setStoredCollapsed(day: Date, collapsed: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(TODO_COLLAPSED_STORAGE_KEY);
+    const data: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+    data[format(day, "yyyy-MM-dd")] = collapsed;
+    localStorage.setItem(TODO_COLLAPSED_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
 export function TodoSection({
   day,
   todos,
@@ -28,8 +54,16 @@ export function TodoSection({
   onUpdate,
   onMoveDay,
 }: TodoSectionProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => getStoredCollapsed(day));
   const [showModal, setShowModal] = useState(false);
+
+  const handleToggleCollapsed = useCallback(() => {
+    setCollapsed((v) => {
+      const next = !v;
+      setStoredCollapsed(day, next);
+      return next;
+    });
+  }, [day]);
 
   const dayTodos = todos.filter((t) => isSameDay(new Date(t.taskDate), day));
   const completedCount = dayTodos.filter((t) => t.completed).length;
@@ -52,7 +86,7 @@ export function TodoSection({
       <div className="flex items-center px-1 py-0.5 gap-1">
         {hasAny && (
           <button
-            onClick={() => setCollapsed((v) => !v)}
+            onClick={handleToggleCollapsed}
             className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label={collapsed ? "Expand todos" : "Collapse todos"}
           >
