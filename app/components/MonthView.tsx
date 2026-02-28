@@ -6,6 +6,8 @@ import {
   endOfMonth,
   startOfWeek,
   endOfWeek,
+  startOfDay,
+  endOfDay,
   addMonths,
   subMonths,
   addDays,
@@ -102,12 +104,15 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const monthEnd = endOfMonth(currentMonth);
   const calendarDays = getCalendarDays(monthStart);
 
-  const visibleStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const visibleEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+  // Fetch range = full grid (including leading/trailing days from adjacent months)
+  const gridFirstDay = calendarDays[0];
+  const gridLastDay = calendarDays[calendarDays.length - 1];
+  const fetchStart = startOfDay(gridFirstDay);
+  const fetchEnd = endOfDay(gridLastDay);
 
   useEffect(() => {
-    const start = visibleStart.toISOString();
-    const end = visibleEnd.toISOString();
+    const start = fetchStart.toISOString();
+    const end = fetchEnd.toISOString();
 
     const fetchAll = async () => {
       setLoading(true);
@@ -161,11 +166,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   );
 
   const refreshEvents = useCallback(async () => {
-    const start = startOfWeek(monthStart, { weekStartsOn: 0 }).toISOString();
-    const end = endOfWeek(monthEnd, { weekStartsOn: 0 }).toISOString();
+    const start = fetchStart.toISOString();
+    const end = fetchEnd.toISOString();
     const res = await fetch(`/api/events?start=${start}&end=${end}`);
     if (res.ok) setEvents(await res.json());
-  }, [monthStart, monthEnd]);
+  }, [fetchStart, fetchEnd]);
 
   const handleEventSaved = useCallback(
     async (_saved: CalendarEvent) => {
@@ -224,13 +229,13 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
             ? { ...prev, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
             : prev
         );
-        const start = visibleStart.toISOString();
-        const end = visibleEnd.toISOString();
+        const start = fetchStart.toISOString();
+        const end = fetchEnd.toISOString();
         const eventsRes = await fetch(`/api/events?start=${start}&end=${end}`);
         if (eventsRes.ok) setEvents(await eventsRes.json());
       }
     },
-    [visibleStart, visibleEnd]
+    [fetchStart, fetchEnd]
   );
 
   // ── Todo handlers ──────────────────────────────────────────
