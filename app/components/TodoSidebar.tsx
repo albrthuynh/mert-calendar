@@ -43,7 +43,7 @@ export function TodoSidebar({
           <ListTodo className="w-4 h-4 text-blue-500 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
-              To-Do List
+              To-Do List ({dayTodos.length})
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">
               {format(selectedDay, "EEEE, MMMM d")}

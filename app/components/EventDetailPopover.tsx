@@ -32,15 +32,41 @@ export function EventDetailPopover({
 }: EventDetailPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
 
-  // Position popover to the right of (or below) the event block
-  const top = Math.min(
-    anchorRect.top + window.scrollY,
-    window.innerHeight - 280
-  );
-  const left =
-    anchorRect.right + 8 + 280 > window.innerWidth
-      ? anchorRect.left - 288
-      : anchorRect.right + 8;
+  // Position popover. On desktop, show beside the event.
+  // On mobile, show above the event and clamp within the viewport.
+  const ESTIMATED_HEIGHT = 280;
+  const VIEWPORT_MARGIN = 8;
+  const isMobile = window.innerWidth <= 768;
+
+  const viewportTop = window.scrollY + VIEWPORT_MARGIN;
+  const viewportBottom = window.scrollY + window.innerHeight - VIEWPORT_MARGIN;
+
+  let top = 0;
+  let left = 0;
+  let width: number | undefined;
+  const maxHeight = viewportBottom - viewportTop;
+
+  if (isMobile) {
+    // Try to position the popover *above* the event on mobile,
+    // while still clamping it within the viewport.
+    const idealTop = anchorRect.top + window.scrollY - ESTIMATED_HEIGHT - 8;
+    const maxTop = viewportBottom - ESTIMATED_HEIGHT;
+    top = Math.max(viewportTop, Math.min(idealTop, maxTop));
+
+    // Make it span most of the screen width with side margins.
+    width = window.innerWidth - VIEWPORT_MARGIN * 2;
+    left = VIEWPORT_MARGIN;
+  } else {
+    // Desktop: position to the right of (or to the left of) the event block.
+    const idealTop = anchorRect.top + window.scrollY;
+    const maxTop = viewportBottom - ESTIMATED_HEIGHT;
+    top = Math.max(viewportTop, Math.min(idealTop, maxTop));
+
+    left =
+      anchorRect.right + 8 + 280 > window.innerWidth
+        ? anchorRect.left - 288
+        : anchorRect.right + 8;
+  }
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -79,7 +105,13 @@ export function EventDetailPopover({
     <div
       ref={ref}
       className="fixed z-50 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-72 overflow-hidden"
-      style={{ top, left }}
+      style={{
+        top,
+        left,
+        maxHeight,
+        overflowY: "auto",
+        width,
+      }}
     >
       {/* Color bar + close */}
       <div
