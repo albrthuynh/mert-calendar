@@ -110,10 +110,11 @@ export function EventSidebar({
           : null,
       };
 
-      const url = isEditing
+      const isTempEvent = event?.originalId?.startsWith?.("temp-");
+      const url = isEditing && !isTempEvent
         ? `/api/events/${event.originalId}`
         : "/api/events";
-      const method = isEditing ? "PUT" : "POST";
+      const method = isEditing && !isTempEvent ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -158,6 +159,10 @@ export function EventSidebar({
     setDeleting(true);
     setError("");
     try {
+      if (event.originalId.startsWith("temp-")) {
+        onDelete();
+        return;
+      }
       const res = await fetch(`/api/events/${event.originalId}`, {
         method: "DELETE",
       });

@@ -129,52 +129,62 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const handleEventClick = useCallback(
     (event: CalendarEvent, rect: DOMRect) => {
-      setPopoverEvent(event);
-      setPopoverRect(rect);
-      setActiveTab("events");
+      if (event.originalId.startsWith("temp-")) {
+        setEditingEvent(event);
+        setShowEventSidebar(true);
+        setPopoverEvent(null);
+        setActiveTab("events");
+      } else {
+        setPopoverEvent(event);
+        setPopoverRect(rect);
+        setActiveTab("events");
+      }
     },
     []
   );
 
   const handleSlotDragCreate = useCallback(
-    async (start: Date, end: Date, _day: Date) => {
-      const res = await fetch("/api/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "New event",
-          startTime: start.toISOString(),
-          endTime: end.toISOString(),
-          color: "#4285F4",
-          allDay: false,
-        }),
-      });
-      if (res.ok) {
-        const created = (await res.json()) as { id: string };
-        const rangeStart = startOfDay(currentDay).toISOString();
-        const rangeEnd = endOfDay(currentDay).toISOString();
-        const eventsRes = await fetch(
-          `/api/events?start=${rangeStart}&end=${rangeEnd}`
-        );
-        if (eventsRes.ok) {
-          const list: CalendarEvent[] = await eventsRes.json();
-          setEvents(list);
-          const toEdit = list.find((e) => e.originalId === created.id);
-          if (toEdit) {
-            setEditingEvent(toEdit);
-            setCreateDate(undefined);
-            setShowEventSidebar(true);
-            setPopoverEvent(null);
-          }
-        }
-        setActiveTab("events");
-      }
+    (start: Date, end: Date, _day: Date) => {
+      const tempId = `temp-${Date.now()}`;
+      const optimisticEvent: CalendarEvent = {
+        id: tempId,
+        originalId: tempId,
+        title: "New event",
+        description: null,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        color: "#4285F4",
+        allDay: false,
+        recurrenceRule: null,
+        recurrenceEndDate: null,
+        isRecurringInstance: false,
+      };
+      setEvents((prev) => [...prev, optimisticEvent]);
+      setEditingEvent(optimisticEvent);
+      setCreateDate(undefined);
+      setShowEventSidebar(true);
+      setPopoverEvent(null);
+      setActiveTab("events");
     },
-    [currentDay]
+    []
   );
 
   const handleEventResize = useCallback(
     async (event: CalendarEvent, startTime: Date, endTime: Date) => {
+      if (event.originalId.startsWith("temp-")) {
+        const updated = {
+          ...event,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        };
+        setEvents((prev) =>
+          prev.map((e) => (e.originalId === event.originalId ? updated : e))
+        );
+        setEditingEvent((prev) =>
+          prev?.originalId === event.originalId ? updated : prev
+        );
+        return;
+      }
       const res = await fetch(`/api/events/${event.originalId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -192,6 +202,26 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const handleEventMove = useCallback(
     async (event: CalendarEvent, startTime: Date, endTime: Date) => {
+      if (event.originalId.startsWith("temp-")) {
+        const updated = {
+          ...event,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        };
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.originalId === event.originalId && e.startTime === event.startTime
+              ? updated
+              : e
+          )
+        );
+        setEditingEvent((prev) =>
+          prev?.originalId === event.originalId && prev?.startTime === event.startTime
+            ? updated
+            : prev
+        );
+        return;
+      }
       const res = await fetch(`/api/events/${event.originalId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -232,6 +262,15 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const handleDeleteFromSidebar = useCallback(async () => {
     if (!editingEvent) return;
+    if (editingEvent.originalId.startsWith("temp-")) {
+      setEvents((prev) =>
+        prev.filter((e) => e.originalId !== editingEvent.originalId)
+      );
+      setShowEventSidebar(false);
+      setEditingEvent(undefined);
+      setCreateDate(undefined);
+      return;
+    }
     await refreshEvents();
     setShowEventSidebar(false);
     setEditingEvent(undefined);
@@ -528,6 +567,11 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           initialStartTime={createDate}
           event={editingEvent}
           onClose={() => {
+            if (editingEvent?.originalId?.startsWith?.("temp-")) {
+              setEvents((prev) =>
+                prev.filter((e) => e.originalId !== editingEvent.originalId)
+              );
+            }
             setShowEventSidebar(false);
             setEditingEvent(undefined);
             setCreateDate(undefined);
