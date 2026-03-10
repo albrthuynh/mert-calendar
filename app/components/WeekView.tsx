@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight, ListTodo } from "lucide-react";
 import { TimeGrid } from "./TimeGrid";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
+import { EventSidebar } from "./EventSidebar";
 import { TodoSection } from "./TodoSection";
 import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
@@ -51,12 +52,13 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
 
-  // Modal / popover state
+  // Modal / popover / sidebar state
   const [showEventModal, setShowEventModal] = useState(false);
   const [createDate, setCreateDate] = useState<Date | undefined>();
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | undefined>();
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
+  const [showEventSidebar, setShowEventSidebar] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
@@ -131,6 +133,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     setCreateDate(date);
     setShowEventModal(true);
     setPopoverEvent(null);
+    setShowEventSidebar(false);
   }, []);
 
   const handleEventClick = useCallback(
@@ -142,7 +145,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   );
 
   const handleSlotDragCreate = useCallback(
-    async (start: Date, end: Date) => {
+    async (start: Date, end: Date, _day: Date) => {
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -155,10 +158,21 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         }),
       });
       if (res.ok) {
+        const created = (await res.json()) as { id: string };
         const rangeStart = weekStart.toISOString();
         const rangeEnd = weekEnd.toISOString();
         const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
-        if (eventsRes.ok) setEvents(await eventsRes.json());
+        if (eventsRes.ok) {
+          const list: CalendarEvent[] = await eventsRes.json();
+          setEvents(list);
+          const toEdit = list.find((e) => e.originalId === created.id);
+          if (toEdit) {
+            setEditingEvent(toEdit);
+            setCreateDate(undefined);
+            setShowEventSidebar(true);
+            setPopoverEvent(null);
+          }
+        }
       }
     },
     [weekStart, weekEnd]
@@ -237,13 +251,14 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     async (_saved: CalendarEvent) => {
       await refreshEvents();
       setShowEventModal(false);
+      setShowEventSidebar(false);
       setEditingEvent(undefined);
       setCreateDate(undefined);
     },
     [refreshEvents]
   );
 
-  const handleDeleteEvent = useCallback(async () => {
+  const handleDeleteFromPopover = useCallback(async () => {
     if (!popoverEvent) return;
     await fetch(`/api/events/${popoverEvent.originalId}`, {
       method: "DELETE",
@@ -253,6 +268,14 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     );
     setPopoverEvent(null);
   }, [popoverEvent]);
+
+  const handleDeleteFromSidebar = useCallback(async () => {
+    if (!editingEvent) return;
+    await refreshEvents();
+    setShowEventSidebar(false);
+    setEditingEvent(undefined);
+    setCreateDate(undefined);
+  }, [editingEvent, refreshEvents]);
 
   const handleEditFromPopover = useCallback(() => {
     if (!popoverEvent) return;
@@ -281,18 +304,26 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         setEvents((prev) =>
           prev.map((e) =>
             e.originalId === event.originalId && e.startTime === event.startTime
-              ? { ...e, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+              ? {
+                  ...e,
+                  startTime: newStart.toISOString(),
+                  endTime: newEnd.toISOString(),
+                }
               : e
           )
         );
         setPopoverEvent((prev) =>
-          prev && prev.originalId === event.originalId && prev.startTime === event.startTime
+          prev &&
+          prev.originalId === event.originalId &&
+          prev.startTime === event.startTime
             ? { ...prev, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
             : prev
         );
         const rangeStart = weekStart.toISOString();
         const rangeEnd = weekEnd.toISOString();
-        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
+        const eventsRes = await fetch(
+          `/api/events?start=${rangeStart}&end=${rangeEnd}`
+        );
         if (eventsRes.ok) setEvents(await eventsRes.json());
       }
     },
@@ -536,7 +567,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       )}
       </div>{/* end calendar + sidebar wrapper */}
 
-      {/* Create / Edit event modal */}
+      {/* Create / Edit event modal (slot click or edit from popover) */}
       {showEventModal && (
         <EventFormModal
           initialStartTime={createDate}
@@ -550,15 +581,30 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         />
       )}
 
-      {/* Event detail popover */}
+      {/* Event detail popover (click existing event) */}
       {popoverEvent && popoverRect && (
         <EventDetailPopover
           event={popoverEvent}
           anchorRect={popoverRect}
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
-          onDelete={handleDeleteEvent}
+          onDelete={handleDeleteFromPopover}
           onMoveTime={handleEventMoveTime}
+        />
+      )}
+
+      {/* Event sidebar (only for drag-create) */}
+      {showEventSidebar && editingEvent && (
+        <EventSidebar
+          initialStartTime={createDate}
+          event={editingEvent}
+          onClose={() => {
+            setShowEventSidebar(false);
+            setEditingEvent(undefined);
+            setCreateDate(undefined);
+          }}
+          onSave={handleEventSaved}
+          onDelete={handleDeleteFromSidebar}
         />
       )}
     </div>

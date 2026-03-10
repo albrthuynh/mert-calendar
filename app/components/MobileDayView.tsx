@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, ListTodo, Calendar as CalendarIcon } from "l
 import { TimeGrid } from "./TimeGrid";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
+import { EventSidebar } from "./EventSidebar";
 import { TodoItem } from "./TodoItem";
 import { TodoFormModal } from "./TodoFormModal";
 import { CalendarEvent, Todo } from "@/types/calendar";
@@ -33,12 +34,13 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<MobileTab>("todos");
 
-  // Modal / popover state
+  // Modal / popover / sidebar state
   const [showEventModal, setShowEventModal] = useState(false);
   const [createDate, setCreateDate] = useState<Date | undefined>();
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | undefined>();
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
+  const [showEventSidebar, setShowEventSidebar] = useState(false);
 
   const [showTodoModal, setShowTodoModal] = useState(false);
 
@@ -121,6 +123,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     setCreateDate(date);
     setShowEventModal(true);
     setPopoverEvent(null);
+    setShowEventSidebar(false);
     setActiveTab("events");
   }, []);
 
@@ -134,7 +137,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   );
 
   const handleSlotDragCreate = useCallback(
-    async (start: Date, end: Date) => {
+    async (start: Date, end: Date, _day: Date) => {
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -147,11 +150,27 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         }),
       });
       if (res.ok) {
-        await refreshEvents();
+        const created = (await res.json()) as { id: string };
+        const rangeStart = startOfDay(currentDay).toISOString();
+        const rangeEnd = endOfDay(currentDay).toISOString();
+        const eventsRes = await fetch(
+          `/api/events?start=${rangeStart}&end=${rangeEnd}`
+        );
+        if (eventsRes.ok) {
+          const list: CalendarEvent[] = await eventsRes.json();
+          setEvents(list);
+          const toEdit = list.find((e) => e.originalId === created.id);
+          if (toEdit) {
+            setEditingEvent(toEdit);
+            setCreateDate(undefined);
+            setShowEventSidebar(true);
+            setPopoverEvent(null);
+          }
+        }
         setActiveTab("events");
       }
     },
-    [refreshEvents]
+    [currentDay]
   );
 
   const handleEventResize = useCallback(
@@ -192,6 +211,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     async (_saved: CalendarEvent) => {
       await refreshEvents();
       setShowEventModal(false);
+      setShowEventSidebar(false);
       setEditingEvent(undefined);
       setCreateDate(undefined);
       setActiveTab("events");
@@ -199,7 +219,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     [refreshEvents]
   );
 
-  const handleDeleteEvent = useCallback(async () => {
+  const handleDeleteFromPopover = useCallback(async () => {
     if (!popoverEvent) return;
     await fetch(`/api/events/${popoverEvent.originalId}`, {
       method: "DELETE",
@@ -209,6 +229,14 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     );
     setPopoverEvent(null);
   }, [popoverEvent]);
+
+  const handleDeleteFromSidebar = useCallback(async () => {
+    if (!editingEvent) return;
+    await refreshEvents();
+    setShowEventSidebar(false);
+    setEditingEvent(undefined);
+    setCreateDate(undefined);
+  }, [editingEvent, refreshEvents]);
 
   const handleEditFromPopover = useCallback(() => {
     if (!popoverEvent) return;
@@ -468,7 +496,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         )}
       </div>
 
-      {/* Create / Edit event modal */}
+      {/* Create / Edit event modal (slot click or edit from popover) */}
       {showEventModal && (
         <EventFormModal
           initialStartTime={createDate}
@@ -482,15 +510,30 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         />
       )}
 
-      {/* Event detail popover */}
+      {/* Event detail popover (click existing event) */}
       {popoverEvent && popoverRect && (
         <EventDetailPopover
           event={popoverEvent}
           anchorRect={popoverRect}
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
-          onDelete={handleDeleteEvent}
+          onDelete={handleDeleteFromPopover}
           onMoveTime={handleEventMoveTime}
+        />
+      )}
+
+      {/* Event sidebar (only for drag-create) */}
+      {showEventSidebar && editingEvent && (
+        <EventSidebar
+          initialStartTime={createDate}
+          event={editingEvent}
+          onClose={() => {
+            setShowEventSidebar(false);
+            setEditingEvent(undefined);
+            setCreateDate(undefined);
+          }}
+          onSave={handleEventSaved}
+          onDelete={handleDeleteFromSidebar}
         />
       )}
 

@@ -656,14 +656,30 @@ export function TimeGrid({
 
               {/* Drag-to-create preview */}
               {showCreatePreview && (() => {
+                const startDate = createPreview!.startDate;
+                const endDate = createPreview!.endDate;
                 const dayStart = startOfDay(day).getTime();
-                const topPx = ((createPreview!.startDate.getTime() - dayStart) / 60000 / 60) * HOUR_HEIGHT;
-                const heightPx = Math.max(20, ((createPreview!.endDate.getTime() - createPreview!.startDate.getTime()) / 60000 / 60) * HOUR_HEIGHT);
+                const topPx = ((startDate.getTime() - dayStart) / 60000 / 60) * HOUR_HEIGHT;
+                const heightPx = Math.max(20, ((endDate.getTime() - startDate.getTime()) / 60000 / 60) * HOUR_HEIGHT);
+                const timeRange = `${format(startDate, "h:mm a")} – ${format(endDate, "h:mm a")}`;
                 return (
                   <div
-                    className="absolute left-1 right-1 rounded-md pointer-events-none z-30 border-2 border-dashed border-blue-400 bg-blue-400/20"
+                    className="absolute left-1 right-1 rounded-md pointer-events-none z-30 border-2 border-dashed border-blue-400 bg-blue-400/20 flex flex-col justify-start overflow-hidden px-1.5 py-0.5"
                     style={{ top: `${topPx}px`, height: `${heightPx}px` }}
-                  />
+                  >
+                    <span
+                      className={`font-semibold text-blue-800 dark:text-blue-200 truncate shrink-0 ${
+                        heightPx < 32 ? "text-[10px] leading-tight" : "text-xs leading-tight"
+                      }`}
+                    >
+                      {timeRange}
+                    </span>
+                    {heightPx >= 40 && (
+                      <span className="text-[10px] text-blue-600/90 dark:text-blue-300/90 truncate mt-0.5">
+                        {format(startDate, "EEE, MMM d")}
+                      </span>
+                    )}
+                  </div>
                 );
               })()}
 

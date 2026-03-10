@@ -21,6 +21,8 @@ function getRecurrenceLabel(rule: string): string {
 }
 
 const MOVE_STEP_MINUTES = 30;
+/** Desktop popover width in px — keep in sync with Tailwind width class below. */
+const POPOVER_WIDTH = 320; // w-80
 
 export function EventDetailPopover({
   event,
@@ -34,7 +36,7 @@ export function EventDetailPopover({
 
   // Position popover. On desktop, show beside the event.
   // On mobile, show above the event and clamp within the viewport.
-  const ESTIMATED_HEIGHT = 280;
+  const ESTIMATED_HEIGHT = 320;
   const VIEWPORT_MARGIN = 8;
   const isMobile = window.innerWidth <= 768;
 
@@ -63,8 +65,8 @@ export function EventDetailPopover({
     top = Math.max(viewportTop, Math.min(idealTop, maxTop));
 
     left =
-      anchorRect.right + 8 + 280 > window.innerWidth
-        ? anchorRect.left - 288
+      anchorRect.right + 8 + POPOVER_WIDTH > window.innerWidth
+        ? anchorRect.left - (POPOVER_WIDTH + 8)
         : anchorRect.right + 8;
   }
 
@@ -104,7 +106,7 @@ export function EventDetailPopover({
   return (
     <div
       ref={ref}
-      className="fixed z-50 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-72 overflow-hidden"
+      className="fixed z-50 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-80 overflow-hidden"
       style={{
         top,
         left,
@@ -118,9 +120,9 @@ export function EventDetailPopover({
         className="h-2 w-full"
         style={{ backgroundColor: event.color }}
       />
-      <div className="px-4 pt-3 pb-4">
+      <div className="px-5 pt-4 pb-5">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm leading-tight">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-base leading-tight">
             {event.title}
           </h3>
           <div className="flex items-center gap-1 shrink-0">
@@ -149,7 +151,7 @@ export function EventDetailPopover({
         </div>
 
         {/* Time */}
-        <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+        <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
           <span>{format(start, "EEEE, MMMM d")}</span>
           <br />
           <span>
@@ -159,7 +161,7 @@ export function EventDetailPopover({
 
         {/* Recurrence */}
         {event.recurrenceRule && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-2">
+          <div className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mb-2">
             <RotateCcw className="w-3 h-3" />
             <span>{getRecurrenceLabel(event.recurrenceRule)}</span>
             {event.recurrenceEndDate && (
@@ -173,7 +175,7 @@ export function EventDetailPopover({
 
         {/* Description */}
         {event.description && (
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 leading-relaxed border-t border-gray-100 dark:border-gray-700/50 pt-2">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 leading-relaxed border-t border-gray-100 dark:border-gray-700/50 pt-2">
             {event.description}
           </p>
         )}

@@ -182,7 +182,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     [refreshEvents]
   );
 
-  const handleDeleteEvent = useCallback(async () => {
+  const handleDeleteFromPopover = useCallback(async () => {
     if (!popoverEvent) return;
     await fetch(`/api/events/${popoverEvent.originalId}`, {
       method: "DELETE",
@@ -220,13 +220,23 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         setEvents((prev) =>
           prev.map((e) =>
             e.originalId === event.originalId && e.startTime === event.startTime
-              ? { ...e, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+              ? {
+                  ...e,
+                  startTime: newStart.toISOString(),
+                  endTime: newEnd.toISOString(),
+                }
               : e
           )
         );
         setPopoverEvent((prev) =>
-          prev && prev.originalId === event.originalId && prev.startTime === event.startTime
-            ? { ...prev, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
+          prev &&
+          prev.originalId === event.originalId &&
+          prev.startTime === event.startTime
+            ? {
+                ...prev,
+                startTime: newStart.toISOString(),
+                endTime: newEnd.toISOString(),
+              }
             : prev
         );
         const start = fetchStart.toISOString();
@@ -516,7 +526,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         )}
       </div>
 
-      {/* Create / Edit event modal */}
+      {/* Create / Edit event modal (day click or edit from popover) */}
       {showEventModal && (
         <EventFormModal
           initialStartTime={createDate}
@@ -530,14 +540,14 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         />
       )}
 
-      {/* Event detail popover */}
+      {/* Event detail popover (click existing event) */}
       {popoverEvent && popoverRect && (
         <EventDetailPopover
           event={popoverEvent}
           anchorRect={popoverRect}
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
-          onDelete={handleDeleteEvent}
+          onDelete={handleDeleteFromPopover}
           onMoveTime={handleEventMoveTime}
         />
       )}
