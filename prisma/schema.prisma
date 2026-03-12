@@ -40,6 +40,11 @@ model User {
   image                  String?
   calendarBackgroundUrl  String?
   calendarTopLeftUrl     String?
+  notificationsEnabled   Boolean   @default(false)
+  defaultReminderMinutes Int       @default(10)
+  notificationSoundEnabled Boolean @default(true)
+  notificationSound      String?
+  notificationVolume     Int       @default(80)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   accounts               Account[]
@@ -66,6 +71,8 @@ model Event {
   allDay            Boolean   @default(false)
   recurrenceRule    String?
   recurrenceEndDate DateTime?
+  reminderMinutes   Int?
+  reminderDisabled  Boolean   @default(false)
   userId            String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

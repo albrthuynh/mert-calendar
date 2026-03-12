@@ -23,6 +23,8 @@ import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
 import { CalendarEvent, Todo } from "@/types/calendar";
 import { fireCelebrationConfetti } from "@/lib/confetti";
+import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
+import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 
 interface MonthViewProps {
   onViewChange: (view: ViewMode) => void;
@@ -99,6 +101,9 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | undefined>();
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
+  const notifPrefs = useNotificationPreferences();
+
+  useEventReminderScheduler({ events, prefs: notifPrefs });
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);

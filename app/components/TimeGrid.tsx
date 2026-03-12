@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject, useState, useRef, useCallback } from "react";
+import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isToday, isSameDay, startOfDay, endOfDay, format } from "date-fns";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
@@ -141,7 +141,9 @@ export function TimeGrid({
   const gridInnerRef = useRef<HTMLDivElement>(null);
   const [createPreview, setCreatePreview] = useState<CreatePreview | null>(null);
   const createPreviewRef = useRef<CreatePreview | null>(null);
-  createPreviewRef.current = createPreview;
+  useEffect(() => {
+    createPreviewRef.current = createPreview;
+  }, [createPreview]);
   const dragCreateRef = useRef<{
     day: Date;
     startY: number;
@@ -298,7 +300,7 @@ export function TimeGrid({
       const localY = Math.max(0, Math.min(maxLocalY, rawLocalY));
       return { day, localY };
     },
-    [weekDays]
+    [scrollRef, weekDays]
   );
 
   const handleEventWrapperPointerDown = useCallback(
@@ -352,7 +354,7 @@ export function TimeGrid({
         };
       }
     },
-    []
+    [scrollRef]
   );
 
   const handleGridPointerMove = useCallback(
@@ -463,13 +465,15 @@ export function TimeGrid({
         }
       }
     },
-    [getColumnAndLocalY]
+    [getColumnAndLocalY, scrollRef]
   );
 
   const resizePreviewRef = useRef<ResizePreview | null>(null);
   const movePreviewRef = useRef<MovePreview | null>(null);
-  resizePreviewRef.current = resizePreview;
-  movePreviewRef.current = movePreview;
+  useEffect(() => {
+    resizePreviewRef.current = resizePreview;
+    movePreviewRef.current = movePreview;
+  }, [resizePreview, movePreview]);
 
   const handleGridPointerUpStable = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {

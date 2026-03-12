@@ -43,6 +43,8 @@ export async function PUT(
     allDay,
     recurrenceRule,
     recurrenceEndDate,
+    reminderMinutes,
+    reminderDisabled,
   } = body;
 
   const existing = await prisma.event.findFirst({
@@ -51,6 +53,36 @@ export async function PUT(
 
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const cleanReminderDisabled =
+    reminderDisabled === undefined
+      ? undefined
+      : typeof reminderDisabled === "boolean"
+        ? reminderDisabled
+        : null;
+  if (cleanReminderDisabled === null) {
+    return NextResponse.json(
+      { error: "reminderDisabled must be a boolean" },
+      { status: 400 }
+    );
+  }
+
+  const cleanReminderMinutes =
+    reminderMinutes === undefined
+      ? undefined
+      : reminderMinutes === null
+        ? null
+        : typeof reminderMinutes === "number" && Number.isFinite(reminderMinutes)
+          ? Math.trunc(reminderMinutes)
+          : NaN;
+  if (cleanReminderMinutes !== undefined && cleanReminderMinutes !== null) {
+    if (!Number.isFinite(cleanReminderMinutes) || cleanReminderMinutes < 0 || cleanReminderMinutes > 10080) {
+      return NextResponse.json(
+        { error: "reminderMinutes must be an integer between 0 and 10080, or null" },
+        { status: 400 }
+      );
+    }
   }
 
   const updated = await prisma.event.update({
@@ -72,6 +104,8 @@ export async function PUT(
           ? new Date(recurrenceEndDate)
           : null,
       }),
+      ...(cleanReminderMinutes !== undefined && { reminderMinutes: cleanReminderMinutes }),
+      ...(cleanReminderDisabled !== undefined && { reminderDisabled: cleanReminderDisabled }),
     },
   });
 

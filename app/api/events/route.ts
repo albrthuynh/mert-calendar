@@ -60,6 +60,8 @@ export async function GET(req: NextRequest) {
     allDay: boolean;
     recurrenceRule: string | null;
     recurrenceEndDate: string | null;
+    reminderMinutes: number | null;
+    reminderDisabled: boolean;
     isRecurringInstance: boolean;
     originalId: string;
   }> = [];
@@ -71,6 +73,8 @@ export async function GET(req: NextRequest) {
         startTime: event.startTime.toISOString(),
         endTime: event.endTime.toISOString(),
         recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
+        reminderMinutes: event.reminderMinutes ?? null,
+        reminderDisabled: event.reminderDisabled ?? false,
         isRecurringInstance: false,
         originalId: event.id,
       });
@@ -101,6 +105,8 @@ export async function GET(req: NextRequest) {
           allDay: event.allDay,
           recurrenceRule: event.recurrenceRule,
           recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
+          reminderMinutes: event.reminderMinutes ?? null,
+          reminderDisabled: event.reminderDisabled ?? false,
           isRecurringInstance: true,
           originalId: event.id,
         });
@@ -112,6 +118,8 @@ export async function GET(req: NextRequest) {
         startTime: event.startTime.toISOString(),
         endTime: event.endTime.toISOString(),
         recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
+        reminderMinutes: event.reminderMinutes ?? null,
+        reminderDisabled: event.reminderDisabled ?? false,
         isRecurringInstance: false,
         originalId: event.id,
       });
@@ -148,6 +156,8 @@ export async function POST(req: NextRequest) {
     allDay,
     recurrenceRule,
     recurrenceEndDate,
+    reminderMinutes,
+    reminderDisabled,
   } = body;
 
   if (!title || !startTime || !endTime) {
@@ -155,6 +165,23 @@ export async function POST(req: NextRequest) {
       { error: "title, startTime, endTime are required" },
       { status: 400 }
     );
+  }
+
+  const cleanReminderDisabled =
+    typeof reminderDisabled === "boolean" ? reminderDisabled : false;
+  const cleanReminderMinutes =
+    reminderMinutes === null || reminderMinutes === undefined
+      ? null
+      : typeof reminderMinutes === "number" && Number.isFinite(reminderMinutes)
+        ? Math.trunc(reminderMinutes)
+        : NaN;
+  if (cleanReminderMinutes !== null) {
+    if (!Number.isFinite(cleanReminderMinutes) || cleanReminderMinutes < 0 || cleanReminderMinutes > 10080) {
+      return NextResponse.json(
+        { error: "reminderMinutes must be an integer between 0 and 10080, or null" },
+        { status: 400 }
+      );
+    }
   }
 
   const event = await prisma.event.create({
@@ -169,6 +196,8 @@ export async function POST(req: NextRequest) {
       recurrenceEndDate: recurrenceEndDate
         ? new Date(recurrenceEndDate)
         : null,
+      reminderMinutes: cleanReminderMinutes,
+      reminderDisabled: cleanReminderDisabled,
       userId: session.user.id,
     },
   });

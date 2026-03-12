@@ -8,6 +8,8 @@ export interface CalendarEvent {
   allDay: boolean;
   recurrenceRule: string | null;
   recurrenceEndDate: string | null;
+  reminderMinutes: number | null; // null => use user default
+  reminderDisabled: boolean; // true => suppress reminder even if defaults enabled
   isRecurringInstance: boolean;
   originalId: string;
 }

@@ -51,6 +51,11 @@ export function EventSidebar({
       ? format(new Date(event.recurrenceEndDate), "yyyy-MM-dd")
       : ""
   );
+  const [reminderChoice, setReminderChoice] = useState<string>(() => {
+    if (event?.reminderDisabled) return "none";
+    if (event?.reminderMinutes === null || event?.reminderMinutes === undefined) return "default";
+    return String(event.reminderMinutes);
+  });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -97,6 +102,17 @@ export function EventSidebar({
     setError("");
 
     try {
+      const reminderDisabled = reminderChoice === "none";
+      let reminderMinutes: number | null = null;
+      if (reminderChoice !== "default" && reminderChoice !== "none") {
+        const n = Number(reminderChoice);
+        if (!Number.isFinite(n) || n < 0 || n > 10080) {
+          setError("Reminder must be between 0 and 10080 minutes.");
+          return;
+        }
+        reminderMinutes = Math.trunc(n);
+      }
+
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
@@ -108,6 +124,8 @@ export function EventSidebar({
         recurrenceEndDate: recurrenceEndDate
           ? new Date(recurrenceEndDate).toISOString()
           : null,
+        reminderMinutes,
+        reminderDisabled,
       };
 
       const isTempEvent = event?.originalId?.startsWith?.("temp-");
@@ -144,6 +162,8 @@ export function EventSidebar({
         startTime: (saved.startTime ?? payload.startTime) as string,
         endTime: (saved.endTime ?? payload.endTime) as string,
         recurrenceEndDate: (saved.recurrenceEndDate ?? payload.recurrenceEndDate) as string | null,
+        reminderMinutes: (saved.reminderMinutes ?? payload.reminderMinutes) as number | null,
+        reminderDisabled: (saved.reminderDisabled ?? payload.reminderDisabled) as boolean,
         isRecurringInstance: false,
         originalId: String(saved.id),
       } as CalendarEvent);
@@ -296,6 +316,27 @@ export function EventSidebar({
                   />
                 </div>
               )}
+            </div>
+
+            {/* Reminder */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Reminder
+              </p>
+              <select
+                value={reminderChoice}
+                onChange={(e) => setReminderChoice(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="default">Use default reminder</option>
+                <option value="none">None</option>
+                <option value="0">At start time</option>
+                <option value="5">5 minutes before</option>
+                <option value="10">10 minutes before</option>
+                <option value="15">15 minutes before</option>
+                <option value="30">30 minutes before</option>
+                <option value="60">60 minutes before</option>
+              </select>
             </div>
 
             {error && (

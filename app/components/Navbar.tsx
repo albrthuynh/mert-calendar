@@ -6,7 +6,9 @@ import { LogOut } from "lucide-react";
 import Image from "next/image";
 import { DarkModeToggle } from "./DarkModeToggle";
 import { CalendarAppearanceModal } from "./CalendarAppearanceModal";
+import { NotificationSettingsModal } from "./NotificationSettingsModal";
 import { useCalendarPreferences } from "../context/CalendarPreferencesContext";
+import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 
 function UserMenu({
   user,
@@ -14,8 +16,10 @@ function UserMenu({
   user: { name?: string | null; image?: string | null } | null | undefined;
 }) {
   const { backgroundUrl, topLeftUrl, setPreferences } = useCalendarPreferences();
+  const notifPrefs = useNotificationPreferences();
   const [open, setOpen] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   if (!user) return null;
 
@@ -58,6 +62,16 @@ function UserMenu({
             </button>
             <button
               type="button"
+              className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={() => {
+                setOpen(false);
+                setShowNotifications(true);
+              }}
+            >
+              Notifications
+            </button>
+            <button
+              type="button"
               className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
               onClick={() => signOut({ callbackUrl: "/auth/signin" })}
             >
@@ -80,6 +94,30 @@ function UserMenu({
             setPreferences(prefs);
           }}
           onClose={() => setShowAppearance(false)}
+        />
+      )}
+      {showNotifications && (
+        <NotificationSettingsModal
+          initial={{
+            notificationsEnabled: notifPrefs.notificationsEnabled,
+            defaultReminderMinutes: notifPrefs.defaultReminderMinutes,
+            notificationSoundEnabled: notifPrefs.notificationSoundEnabled,
+            notificationSound: notifPrefs.notificationSound,
+            notificationVolume: notifPrefs.notificationVolume,
+          }}
+          onSave={async (prefs) => {
+            const res = await fetch("/api/user/notification-settings", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(prefs),
+            });
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(text || "Failed to save notification settings");
+            }
+            notifPrefs.setPreferences(prefs);
+          }}
+          onClose={() => setShowNotifications(false)}
         />
       )}
     </>

@@ -19,6 +19,8 @@ import { TodoFormModal } from "./TodoFormModal";
 import { CalendarEvent, Todo } from "@/types/calendar";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import { fireCelebrationConfetti } from "@/lib/confetti";
+import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
+import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 
 type MobileTab = "todos" | "events";
 
@@ -46,6 +48,9 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
+  const notifPrefs = useNotificationPreferences();
+
+  useEventReminderScheduler({ events, prefs: notifPrefs });
 
   // Live clock
   useEffect(() => {
@@ -157,6 +162,8 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         allDay: false,
         recurrenceRule: null,
         recurrenceEndDate: null,
+        reminderMinutes: null,
+        reminderDisabled: false,
         isRecurringInstance: false,
       };
       setEvents((prev) => [...prev, optimisticEvent]);

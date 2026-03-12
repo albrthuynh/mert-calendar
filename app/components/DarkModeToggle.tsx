@@ -8,7 +8,10 @@ export function DarkModeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const t = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(t);
+  }, []);
 
   if (!mounted) {
     return <div className="w-14 h-7 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />;
