@@ -24,6 +24,7 @@ import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
+import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
 
 export { HOUR_HEIGHT };
 
@@ -67,6 +68,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const notifPrefs = useNotificationPreferences();
 
   useEventReminderScheduler({ events, prefs: notifPrefs });
+  useTodoReminderScheduler({ todos, prefs: notifPrefs });
 
   // Live clock
   useEffect(() => {
