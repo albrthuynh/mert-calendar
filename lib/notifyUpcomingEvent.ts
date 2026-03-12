@@ -18,8 +18,8 @@ export async function notifyUpcomingEvent(opts: {
   const toastMessage = timeLabel ? `Starts at ${timeLabel}` : undefined;
 
   let showedBrowser = false;
-  if (typeof window !== "undefined" && "Notification" in window) {
-    if (Notification.permission === "granted") {
+  if (typeof window !== "undefined") {
+    if ("Notification" in window && Notification.permission === "granted") {
       try {
         const tag = `mert-calendar-${event.originalId}-${event.startTime}`;
         new Notification(title, {
@@ -28,9 +28,21 @@ export async function notifyUpcomingEvent(opts: {
         });
         showedBrowser = true;
       } catch {
-        // fall back to toast
+        // fall back to toast/alert
       }
     }
+
+    if (prefs.notificationSoundEnabled) {
+      await playNotificationSound({
+        sound: normalizeSoundId(prefs.notificationSound),
+        volume: prefs.notificationVolume,
+      });
+    }
+
+    const alertMessage = toastMessage
+      ? `${title}\n\n${toastMessage}`
+      : `${title}\n\nEvent starting soon.`;
+    window.alert(alertMessage);
   }
 
   // Always show a lightweight in-app signal so it feels reliable.
@@ -39,12 +51,5 @@ export async function notifyUpcomingEvent(opts: {
     title: showedBrowser ? `Reminder: ${title}` : `Event reminder: ${title}`,
     message: toastMessage,
   });
-
-  if (prefs.notificationSoundEnabled) {
-    await playNotificationSound({
-      sound: normalizeSoundId(prefs.notificationSound),
-      volume: prefs.notificationVolume,
-    });
-  }
 }
 
