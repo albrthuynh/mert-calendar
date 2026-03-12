@@ -1,7 +1,9 @@
-export type NotificationSoundId = "beep" | "chime";
+export type NotificationSoundId = "beep" | "chime" | "doorbell";
 
 export function normalizeSoundId(id: string | null | undefined): NotificationSoundId {
-  return id === "chime" ? "chime" : "beep";
+  if (id === "chime") return "chime";
+  if (id === "doorbell") return "doorbell";
+  return "beep";
 }
 
 export async function playNotificationSound(opts: {
@@ -11,8 +13,22 @@ export async function playNotificationSound(opts: {
   const volume = Math.max(0, Math.min(100, Math.trunc(opts.volume))) / 100;
   if (volume <= 0) return;
 
+  // For the custom mp3-based sound, use the HTMLAudioElement API.
+  if (opts.sound === "doorbell") {
+    if (typeof window === "undefined" || typeof Audio === "undefined") return;
+    const audio = new Audio("/doorbell.mp3");
+    audio.volume = volume;
+    try {
+      await audio.play();
+    } catch {
+      // If autoplay is blocked or play fails, just silently ignore
+    }
+    return;
+  }
+
   const AudioContextCtor =
-    window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextCtor) return;
 
   const ctx = new AudioContextCtor();

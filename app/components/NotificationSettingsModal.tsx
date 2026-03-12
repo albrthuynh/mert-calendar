@@ -8,6 +8,7 @@ const REMINDER_OPTIONS_MINUTES = [0, 5, 10, 15, 30, 60] as const;
 const SOUND_OPTIONS = [
   { id: "beep", label: "Beep" },
   { id: "chime", label: "Chime" },
+  { id: "doorbell", label: "Doorbell" },
 ] as const;
 
 type Props = {
