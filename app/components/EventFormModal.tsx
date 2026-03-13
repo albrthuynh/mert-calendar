@@ -28,6 +28,9 @@ export function EventFormModal({
   onSave,
 }: EventFormModalProps) {
   const isEditing = !!event;
+  const canChooseRecurringEditScope = Boolean(
+    isEditing && event?.isRecurringInstance && event?.recurrenceRule
+  );
 
   const defaultStart = initialStartTime ?? initialDate ?? new Date();
   const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
@@ -49,6 +52,7 @@ export function EventFormModal({
       ? format(new Date(event.recurrenceEndDate), "yyyy-MM-dd")
       : ""
   );
+  const [editScope, setEditScope] = useState<"single" | "series">("single");
   const [reminderChoice, setReminderChoice] = useState<string>(() => {
     if (event?.reminderDisabled) return "none";
     if (event?.reminderMinutes === null || event?.reminderMinutes === undefined) return "default";
@@ -115,6 +119,10 @@ export function EventFormModal({
           : null,
         reminderMinutes,
         reminderDisabled,
+        ...(canChooseRecurringEditScope && {
+          editScope,
+          instanceStartTime: event?.instanceStartTime ?? event?.startTime,
+        }),
       };
 
       const url = isEditing
@@ -256,6 +264,25 @@ export function EventFormModal({
               </div>
             )}
           </div>
+
+          {/* Recurring edit scope */}
+          {canChooseRecurringEditScope && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Apply changes to
+              </p>
+              <select
+                value={editScope}
+                onChange={(e) =>
+                  setEditScope(e.target.value === "series" ? "series" : "single")
+                }
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="single">This event only</option>
+                <option value="series">All events in the series</option>
+              </select>
+            </div>
+          )}
 
           {/* Reminder */}
           <div className="space-y-1.5">

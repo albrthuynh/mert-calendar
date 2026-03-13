@@ -33,24 +33,24 @@ model Session {
 }
 
 model User {
-  id                     String    @id @default(cuid())
-  name                   String?
-  email                  String?   @unique
-  emailVerified          DateTime?
-  image                  String?
-  calendarBackgroundUrl  String?
-  calendarTopLeftUrl     String?
-  notificationsEnabled   Boolean   @default(false)
-  defaultReminderMinutes Int       @default(10)
-  notificationSoundEnabled Boolean @default(true)
-  notificationSound      String?
-  notificationVolume     Int       @default(80)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  accounts               Account[]
-  events                 Event[]
-  sessions               Session[]
-  todos                  Todo[]
+  id                       String    @id @default(cuid())
+  name                     String?
+  email                    String?   @unique
+  emailVerified            DateTime?
+  image                    String?
+  calendarBackgroundUrl    String?
+  calendarTopLeftUrl       String?
+  notificationsEnabled     Boolean   @default(false)
+  defaultReminderMinutes   Int       @default(10)
+  notificationSoundEnabled Boolean   @default(true)
+  notificationSound        String?
+  notificationVolume       Int       @default(80)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  accounts                 Account[]
+  events                   Event[]
+  sessions                 Session[]
+  todos                    Todo[]
 }
 
 model VerificationToken {
@@ -63,6 +63,7 @@ model VerificationToken {
 
 model Event {
   id                String    @id @default(cuid())
+  instanceId        String?   @unique
   title             String
   description       String?
   startTime         DateTime
@@ -76,7 +77,12 @@ model Event {
   userId            String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parentEventId String?
+  parentEvent   Event?  @relation("EventChildren", fields: [parentEventId], references: [id])
+  childEvents   Event[] @relation("EventChildren")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Todo {

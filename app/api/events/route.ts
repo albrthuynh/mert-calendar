@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { RRule } from "rrule";
 
+function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
+  return `${seriesId}__${instanceStartTimeIso}`;
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -23,31 +27,30 @@ export async function GET(req: NextRequest) {
   const rangeStart = new Date(start);
   const rangeEnd = new Date(end);
 
-  // Fetch events that could appear in the range:
-  // - non-recurring events that overlap the range
-  // - recurring events that started before rangeEnd (need to expand)
-  const events = await prisma.event.findMany({
-    where: {
-      userId: session.user.id,
-      OR: [
-        // Non-recurring: overlap range
-        {
-          recurrenceRule: null,
-          startTime: { lte: rangeEnd },
-          endTime: { gte: rangeStart },
-        },
-        // Recurring: started before range end and either no end date or end date after range start
-        {
-          NOT: { recurrenceRule: null },
-          startTime: { lte: rangeEnd },
-          OR: [
-            { recurrenceEndDate: null },
-            { recurrenceEndDate: { gte: rangeStart } },
-          ],
-        },
-      ],
-    },
-  });
+  // Fetch base events:
+  // - standalone non-recurring events that overlap the range (excluding per-instance overrides)
+  // - recurring series events + their per-instance override children
+  const [standaloneEvents, seriesEvents] = await Promise.all([
+    (prisma.event as any).findMany({
+      where: {
+        userId: session.user.id,
+        parentEventId: null,
+        recurrenceRule: null,
+        startTime: { lte: rangeEnd },
+        endTime: { gte: rangeStart },
+      },
+    }),
+    (prisma.event as any).findMany({
+      where: {
+        userId: session.user.id,
+        parentEventId: null,
+        NOT: { recurrenceRule: null },
+        startTime: { lte: rangeEnd },
+        OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: rangeStart } }],
+      },
+      include: { childEvents: true },
+    }),
+  ]);
 
   // Expand recurring events into occurrences within range
   const result: Array<{
@@ -64,27 +67,27 @@ export async function GET(req: NextRequest) {
     reminderDisabled: boolean;
     isRecurringInstance: boolean;
     originalId: string;
+    instanceStartTime: string | null;
   }> = [];
 
-  for (const event of events) {
-    if (!event.recurrenceRule) {
-      result.push({
-        ...event,
-        startTime: event.startTime.toISOString(),
-        endTime: event.endTime.toISOString(),
-        recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
-        reminderMinutes: event.reminderMinutes ?? null,
-        reminderDisabled: event.reminderDisabled ?? false,
-        isRecurringInstance: false,
-        originalId: event.id,
-      });
-      continue;
-    }
+  for (const event of standaloneEvents) {
+    result.push({
+      ...event,
+      startTime: event.startTime.toISOString(),
+      endTime: event.endTime.toISOString(),
+      recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
+      reminderMinutes: event.reminderMinutes ?? null,
+      reminderDisabled: event.reminderDisabled ?? false,
+      isRecurringInstance: false,
+      originalId: event.id,
+      instanceStartTime: null,
+    });
+  }
 
+  for (const event of seriesEvents) {
     // Expand recurring event
     try {
-      const durationMs =
-        event.endTime.getTime() - event.startTime.getTime();
+      const durationMs = event.endTime.getTime() - event.startTime.getTime();
 
       const rruleStr = `DTSTART:${event.startTime
         .toISOString()
@@ -94,12 +97,41 @@ export async function GET(req: NextRequest) {
       const rule = RRule.fromString(rruleStr);
       const occurrences = rule.between(rangeStart, rangeEnd, true);
 
+      const overridesByInstanceId = new Map<string, (typeof event.childEvents)[number]>();
+      for (const child of event.childEvents) {
+        if (child.instanceId) overridesByInstanceId.set(child.instanceId, child);
+      }
+
       for (const occ of occurrences) {
+        const occStartIso = occ.toISOString();
+        const instanceId = makeInstanceId(event.id, occStartIso);
+        const override = overridesByInstanceId.get(instanceId);
+
+        if (override) {
+          result.push({
+            id: override.id,
+            title: override.title,
+            description: override.description,
+            startTime: override.startTime.toISOString(),
+            endTime: override.endTime.toISOString(),
+            color: override.color,
+            allDay: override.allDay,
+            recurrenceRule: event.recurrenceRule,
+            recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
+            reminderMinutes: override.reminderMinutes ?? null,
+            reminderDisabled: override.reminderDisabled ?? false,
+            isRecurringInstance: true,
+            originalId: event.id,
+            instanceStartTime: occStartIso,
+          });
+          continue;
+        }
+
         result.push({
           id: event.id,
           title: event.title,
           description: event.description,
-          startTime: occ.toISOString(),
+          startTime: occStartIso,
           endTime: new Date(occ.getTime() + durationMs).toISOString(),
           color: event.color,
           allDay: event.allDay,
@@ -109,6 +141,7 @@ export async function GET(req: NextRequest) {
           reminderDisabled: event.reminderDisabled ?? false,
           isRecurringInstance: true,
           originalId: event.id,
+          instanceStartTime: occStartIso,
         });
       }
     } catch {
@@ -122,6 +155,7 @@ export async function GET(req: NextRequest) {
         reminderDisabled: event.reminderDisabled ?? false,
         isRecurringInstance: false,
         originalId: event.id,
+        instanceStartTime: null,
       });
     }
   }

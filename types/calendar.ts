@@ -12,6 +12,11 @@ export interface CalendarEvent {
   reminderDisabled: boolean; // true => suppress reminder even if defaults enabled
   isRecurringInstance: boolean;
   originalId: string;
+  /**
+   * For recurring instances, this is the series occurrence start (ISO) used to
+   * identify the instance even if an override moves it.
+   */
+  instanceStartTime?: string | null;
 }
 
 export interface Todo {
