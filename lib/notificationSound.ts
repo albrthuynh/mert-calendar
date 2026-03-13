@@ -1,8 +1,9 @@
-export type NotificationSoundId = "beep" | "chime" | "doorbell";
+export type NotificationSoundId = "beep" | "chime" | "doorbell" | "pokemon";
 
 export function normalizeSoundId(id: string | null | undefined): NotificationSoundId {
   if (id === "chime") return "chime";
   if (id === "doorbell") return "doorbell";
+  if (id === "pokemon") return "pokemon";
   return "beep";
 }
 
@@ -14,9 +15,9 @@ export async function playNotificationSound(opts: {
   if (volume <= 0) return;
 
   // For the custom mp3-based sound, use the HTMLAudioElement API.
-  if (opts.sound === "doorbell") {
+  if (opts.sound === "doorbell" || opts.sound === "pokemon") {
     if (typeof window === "undefined" || typeof Audio === "undefined") return;
-    const audio = new Audio("/doorbell.mp3");
+    const audio = new Audio(opts.sound === "doorbell" ? "/doorbell.mp3" : "/pokemon.mp3");
     audio.volume = volume;
     try {
       await audio.play();

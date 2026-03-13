@@ -9,6 +9,7 @@ const SOUND_OPTIONS = [
   { id: "beep", label: "Beep" },
   { id: "chime", label: "Chime" },
   { id: "doorbell", label: "Doorbell" },
+  { id: "pokemon", label: "Pokemon" },
 ] as const;
 
 type Props = {
