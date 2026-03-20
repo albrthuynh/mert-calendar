@@ -134,14 +134,24 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         setEditingEvent(event);
         setShowEventSidebar(true);
         setPopoverEvent(null);
+        setPopoverRect(null);
         setActiveTab("events");
       } else {
+        if (
+          popoverEvent &&
+          popoverEvent.originalId === event.originalId &&
+          popoverEvent.startTime === event.startTime
+        ) {
+          setPopoverEvent(null);
+          setPopoverRect(null);
+          return;
+        }
         setPopoverEvent(event);
         setPopoverRect(rect);
         setActiveTab("events");
       }
     },
-    []
+    [popoverEvent]
   );
 
   const handleSlotDragCreate = useCallback(

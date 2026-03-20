@@ -145,12 +145,22 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         setEditingEvent(event);
         setShowEventSidebar(true);
         setPopoverEvent(null);
+        setPopoverRect(null);
       } else {
+        if (
+          popoverEvent &&
+          popoverEvent.originalId === event.originalId &&
+          popoverEvent.startTime === event.startTime
+        ) {
+          setPopoverEvent(null);
+          setPopoverRect(null);
+          return;
+        }
         setPopoverEvent(event);
         setPopoverRect(rect);
       }
     },
-    []
+    [popoverEvent]
   );
 
   const handleSlotDragCreate = useCallback(

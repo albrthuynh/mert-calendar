@@ -164,10 +164,19 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
 
   const handleEventClick = useCallback(
     (event: CalendarEvent, rect: DOMRect) => {
+      if (
+        popoverEvent &&
+        popoverEvent.originalId === event.originalId &&
+        popoverEvent.startTime === event.startTime
+      ) {
+        setPopoverEvent(null);
+        setPopoverRect(null);
+        return;
+      }
       setPopoverEvent(event);
       setPopoverRect(rect);
     },
-    []
+    [popoverEvent]
   );
 
   const refreshEvents = useCallback(async () => {
@@ -485,6 +494,8 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                         {dayEvents.map((event) => (
                           <button
                             key={event.id}
+                            type="button"
+                            data-event-trigger
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEventClick(

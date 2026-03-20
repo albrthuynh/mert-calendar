@@ -633,10 +633,13 @@ export function TimeGrid({
                   resizePreview &&
                   resizePreview.event.originalId === event.originalId &&
                   resizePreview.event.startTime === event.startTime;
+                const useDirectClick =
+                  event.isRecurringInstance || Boolean(event.recurrenceRule);
                 return (
                   <div
                     key={`${event.originalId}-${event.startTime}`}
                     data-event
+                    data-event-trigger
                     onPointerDown={(e) =>
                       handleEventWrapperPointerDown(e, event, day)
                     }
@@ -646,7 +649,14 @@ export function TimeGrid({
                       dayStart={day}
                       columnIndex={column}
                       totalColumns={totalColumns}
-                      onClick={onEventClick}
+                      onClick={
+                        useDirectClick
+                          ? onEventClick
+                          : () => {
+                              // Non-recurring events are click-handled by pointer-up logic
+                              // to support drag/move/resize without duplicate click events.
+                            }
+                      }
                       overrideStart={
                         isResizing ? resizePreview!.startTime : undefined
                       }

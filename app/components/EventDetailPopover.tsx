@@ -90,6 +90,8 @@ export function EventDetailPopover({
       }
     };
     const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-event-trigger]")) return;
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
     window.addEventListener("keydown", handleKey);
@@ -127,6 +129,7 @@ export function EventDetailPopover({
           </h3>
           <div className="flex items-center gap-1 shrink-0">
             <button
+              type="button"
               onClick={onEdit}
               className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               title="Edit"
@@ -134,6 +137,7 @@ export function EventDetailPopover({
               <Pencil className="w-3.5 h-3.5" />
             </button>
             <button
+              type="button"
               onClick={onDelete}
               className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
               title="Delete"
@@ -141,6 +145,7 @@ export function EventDetailPopover({
               <Trash2 className="w-3.5 h-3.5" />
             </button>
             <button
+              type="button"
               onClick={onClose}
               className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               title="Close"
