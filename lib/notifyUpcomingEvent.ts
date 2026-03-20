@@ -22,10 +22,12 @@ export async function notifyUpcomingEvent(opts: {
     if ("Notification" in window && Notification.permission === "granted") {
       try {
         const tag = `mert-calendar-${event.originalId}-${event.startTime}`;
-        new Notification(title, {
+        const notification = new Notification(title, {
           body: toastMessage ?? "Event starting soon.",
           tag,
+          requireInteraction: false,
         });
+        window.setTimeout(() => notification.close(), 12_000);
         showedBrowser = true;
       } catch {
         // fall back to toast/alert
@@ -39,10 +41,6 @@ export async function notifyUpcomingEvent(opts: {
       });
     }
 
-    const alertMessage = toastMessage
-      ? `${title}\n\n${toastMessage}`
-      : `${title}\n\nEvent starting soon.`;
-    window.alert(alertMessage);
   }
 
   // Always show a lightweight in-app signal so it feels reliable.
@@ -52,4 +50,3 @@ export async function notifyUpcomingEvent(opts: {
     message: toastMessage,
   });
 }
-

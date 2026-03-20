@@ -28,10 +28,12 @@ export async function notifyUpcomingTodo(opts: {
     if ("Notification" in window && Notification.permission === "granted") {
       try {
         const tag = `mert-calendar-todo-${todo.id}-${todo.dueDate ?? todo.taskDate}`;
-        new Notification(title, {
+        const notification = new Notification(title, {
           body: toastMessage,
           tag,
+          requireInteraction: false,
         });
+        window.setTimeout(() => notification.close(), 12_000);
         showedBrowser = true;
       } catch {
         // fall back to toast/alert
@@ -45,8 +47,6 @@ export async function notifyUpcomingTodo(opts: {
       });
     }
 
-    const alertMessage = `${title}\n\n${toastMessage}`;
-    window.alert(alertMessage);
   }
 
   // Always show a lightweight in-app signal so it feels reliable.
@@ -56,4 +56,3 @@ export async function notifyUpcomingTodo(opts: {
     message: toastMessage,
   });
 }
-

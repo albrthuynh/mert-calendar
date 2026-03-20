@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   startOfWeek,
   endOfWeek,
@@ -25,6 +25,7 @@ import { fireCelebrationConfetti } from "@/lib/confetti";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
+import { useLiveNow } from "../hooks/useLiveNow";
 
 export { HOUR_HEIGHT };
 
@@ -46,9 +47,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [weekStart, setWeekStart] = useState<Date>(() =>
     startOfWeek(new Date(), { weekStartsOn: 0 })
   );
-  // Initialize currentTime on the client after mount to avoid
-  // server/client time mismatches affecting the red line position.
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const currentTime = useLiveNow();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -70,14 +69,6 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   useEventReminderScheduler({ events, prefs: notifPrefs });
   useTodoReminderScheduler({ todos, prefs: notifPrefs });
 
-  // Live clock
-  useEffect(() => {
-    // Set immediately on mount, then update every minute
-    setCurrentTime(new Date());
-    const interval = setInterval(() => setCurrentTime(new Date()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
   // Scroll to the current-time red line on first mount
   useEffect(() => {
     if (didInitialScrollRef.current) return;
@@ -94,8 +85,14 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     didInitialScrollRef.current = true;
   }, [currentTime]);
 
-  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const weekEnd = useMemo(
+    () => endOfWeek(weekStart, { weekStartsOn: 0 }),
+    [weekStart]
+  );
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
+    [weekStart]
+  );
 
   // Fetch events + todos whenever the visible week changes
   useEffect(() => {
@@ -119,8 +116,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     };
 
     fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekStart]);
+  }, [weekStart, weekEnd]);
 
   const goToPrevWeek = useCallback(
     () => setWeekStart((w) => subWeeks(w, 1)),
@@ -464,6 +460,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       {/* Week navigation */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
         <button
+          type="button"
           onClick={goToToday}
           className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
         >
@@ -471,6 +468,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         </button>
         <div className="flex items-center gap-0.5">
           <button
+            type="button"
             onClick={goToPrevWeek}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Previous week"
@@ -478,6 +476,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
             <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
+            type="button"
             onClick={goToNextWeek}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Next week"
@@ -494,6 +493,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
             <ViewToggle currentView="week" onViewChange={onViewChange} />
           )}
           <button
+            type="button"
             onClick={() => {
               if (showSidebar) {
                 setShowSidebar(false);
@@ -539,6 +539,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
             >
               {/* Date header — click to open/toggle todo sidebar */}
               <button
+                type="button"
                 onClick={() => {
                   if (isSelected && showSidebar) {
                     setShowSidebar(false);

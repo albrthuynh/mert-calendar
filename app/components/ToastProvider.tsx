@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -18,16 +19,31 @@ export type Toast = {
 
 type ToastContextValue = {
   pushToast: (t: Omit<Toast, "id" | "createdAt"> & { id?: string }) => void;
+  dismissToast: (id: string) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const suppressedToastIdsRef = useRef<Set<string>>(new Set());
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    suppressedToastIdsRef.current.add(id);
+    removeToast(id);
+    window.setTimeout(() => {
+      suppressedToastIdsRef.current.delete(id);
+    }, 24 * 60 * 60 * 1000);
+  }, [removeToast]);
 
   const pushToast = useCallback(
     (t: Omit<Toast, "id" | "createdAt"> & { id?: string }) => {
       const id = t.id ?? `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      if (suppressedToastIdsRef.current.has(id)) return;
       const toast: Toast = {
         id,
         title: t.title,
@@ -39,13 +55,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         return next.slice(-3);
       });
       window.setTimeout(() => {
-        setToasts((prev) => prev.filter((x) => x.id !== id));
+        removeToast(id);
       }, 8000);
     },
-    []
+    [removeToast]
   );
 
-  const value = useMemo(() => ({ pushToast }), [pushToast]);
+  const value = useMemo(
+    () => ({ pushToast, dismissToast }),
+    [pushToast, dismissToast]
+  );
 
   return (
     <ToastContext.Provider value={value}>
@@ -56,9 +75,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 shadow-lg backdrop-blur px-4 py-3"
           >
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {t.title}
-            </p>
+            <div className="flex items-start gap-2">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex-1 min-w-0">
+                {t.title}
+              </p>
+              <button
+                type="button"
+                onClick={() => dismissToast(t.id)}
+                className="text-xs leading-none px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                aria-label="Dismiss notification"
+              >
+                x
+              </button>
+            </div>
             {t.message && (
               <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
                 {t.message}
@@ -76,4 +105,3 @@ export function useToast() {
   if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
 }
-

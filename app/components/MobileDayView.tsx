@@ -22,6 +22,7 @@ import { fireCelebrationConfetti } from "@/lib/confetti";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
+import { useLiveNow } from "../hooks/useLiveNow";
 
 type MobileTab = "todos" | "events";
 
@@ -31,7 +32,7 @@ interface MobileDayViewProps {
 
 export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [currentDay, setCurrentDay] = useState<Date>(() => startOfDay(new Date()));
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const currentTime = useLiveNow();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,13 +54,6 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   useEventReminderScheduler({ events, prefs: notifPrefs });
   useTodoReminderScheduler({ todos, prefs: notifPrefs });
-
-  // Live clock
-  useEffect(() => {
-    setCurrentTime(new Date());
-    const interval = setInterval(() => setCurrentTime(new Date()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Scroll to the current-time red line on first mount
   useEffect(() => {
@@ -396,6 +390,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       {/* Navigation */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
         <button
+          type="button"
           onClick={goToToday}
           className="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
         >
@@ -403,6 +398,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         </button>
         <div className="flex items-center gap-0.5">
           <button
+            type="button"
             onClick={goToPrevDay}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Previous day"
@@ -410,6 +406,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
+            type="button"
             onClick={goToNextDay}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Next day"
@@ -442,6 +439,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         </div>
         <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-full p-0.5">
           <button
+            type="button"
             onClick={() => setActiveTab("todos")}
             className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
               activeTab === "todos"
@@ -452,6 +450,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             To-Dos
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab("events")}
             className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
               activeTab === "events"
@@ -480,6 +479,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setShowTodoModal(true)}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 dark:border-blue-800 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
               >
@@ -604,4 +604,3 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     </div>
   );
 }
-
