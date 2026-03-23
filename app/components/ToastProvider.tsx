@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useEffect,
   useCallback,
   useContext,
   useMemo,
@@ -28,16 +29,33 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const suppressedToastIdsRef = useRef<Set<string>>(new Set());
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("dismissed-toast-ids");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      suppressedToastIdsRef.current = new Set(parsed.filter((x) => typeof x === "string"));
+    } catch {
+      // ignore malformed local state
+    }
+  }, []);
+
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
   const dismissToast = useCallback((id: string) => {
     suppressedToastIdsRef.current.add(id);
+    try {
+      window.localStorage.setItem(
+        "dismissed-toast-ids",
+        JSON.stringify(Array.from(suppressedToastIdsRef.current))
+      );
+    } catch {
+      // ignore storage write failures
+    }
     removeToast(id);
-    window.setTimeout(() => {
-      suppressedToastIdsRef.current.delete(id);
-    }, 24 * 60 * 60 * 1000);
   }, [removeToast]);
 
   const pushToast = useCallback(
@@ -54,11 +72,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const next = [...prev.filter((x) => x.id !== id), toast];
         return next.slice(-3);
       });
-      window.setTimeout(() => {
-        removeToast(id);
-      }, 8000);
     },
-    [removeToast]
+    []
   );
 
   const value = useMemo(
