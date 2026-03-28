@@ -21,7 +21,12 @@ import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
-import { CalendarEvent, Todo } from "@/types/calendar";
+import { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
+import { ImportantDayLabel } from "./ImportantDayLabel";
+import {
+  ImportantDayEditorPopover,
+  type ImportantDaySavePayload,
+} from "./ImportantDayEditorPopover";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
@@ -92,6 +97,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   );
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -101,6 +107,10 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | undefined>();
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
+  const [importantDayEditor, setImportantDayEditor] = useState<{
+    day: Date;
+    anchorRect: DOMRect;
+  } | null>(null);
   const notifPrefs = useNotificationPreferences();
 
   useEventReminderScheduler({ events, prefs: notifPrefs });
@@ -122,12 +132,18 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [eventsRes, todosRes] = await Promise.all([
+        const startKey = format(fetchStart, "yyyy-MM-dd");
+        const endKey = format(fetchEnd, "yyyy-MM-dd");
+        const [eventsRes, todosRes, importantRes] = await Promise.all([
           fetch(`/api/events?start=${start}&end=${end}`),
           fetch(`/api/todos?start=${start}&end=${end}`),
+          fetch(
+            `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
+          ),
         ]);
         if (eventsRes.ok) setEvents(await eventsRes.json());
         if (todosRes.ok) setTodos(await todosRes.json());
+        if (importantRes.ok) setImportantDays(await importantRes.json());
       } catch {
         /* empty */
       } finally {
@@ -321,6 +337,38 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   }, []);
 
+  const handleImportantDaySave = useCallback(
+    async (payload: ImportantDaySavePayload) => {
+      if (payload.remove) {
+        const existing = importantDays.find((d) => d.date === payload.dateKey);
+        if (!existing) return;
+        const res = await fetch(`/api/important-days/${existing.id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          setImportantDays((prev) => prev.filter((d) => d.id !== existing.id));
+        }
+        return;
+      }
+      const res = await fetch("/api/important-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: payload.dateKey,
+          label: payload.label,
+        }),
+      });
+      if (res.ok) {
+        const row: ImportantDay = await res.json();
+        setImportantDays((prev) => {
+          const rest = prev.filter((d) => d.date !== payload.dateKey);
+          return [...rest, row].sort((a, b) => a.date.localeCompare(b.date));
+        });
+      }
+    },
+    [importantDays]
+  );
+
   // ── Derived data ──────────────────────────────────────────
 
   const weeks: Date[][] = [];
@@ -430,11 +478,16 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                     : false;
                   const dayEvents = getEventsForDay(events, day);
                   const dayTodos = getTodosForDay(todos, day);
+                  const dateKey = format(day, "yyyy-MM-dd");
+                  const importantRow = importantDays.find((d) => d.date === dateKey);
+                  const importantLabel = importantRow
+                    ? importantRow.label.trim()
+                    : "";
 
                   return (
                     <div
                       key={day.toISOString()}
-                      className={`border-r border-gray-200 dark:border-gray-700 last:border-r-0 flex flex-col min-h-0 overflow-hidden cursor-pointer transition-colors ${
+                      className={`group relative border-r border-gray-200 dark:border-gray-700 last:border-r-0 flex flex-col min-h-0 overflow-hidden cursor-pointer transition-colors ${
                         inMonth
                           ? "bg-white dark:bg-gray-900"
                           : "bg-gray-50/80 dark:bg-gray-950/50"
@@ -447,7 +500,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                     >
                       {/* Day number + to-dos toggle */}
                       <div className="flex items-center justify-between gap-1 px-1.5 pt-1 shrink-0">
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center gap-0.5 min-w-0">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -459,12 +512,12 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                                 setShowSidebar(true);
                               }
                             }}
-                            className={`w-7 h-7 flex items-center justify-center rounded-full text-sm transition-colors shrink-0 ${
+                            className={`min-w-[1.25rem] flex items-center justify-center text-base font-semibold tabular-nums transition-colors shrink-0 ${
                               today
-                                ? "bg-blue-500 text-white font-semibold"
+                                ? "text-blue-600 dark:text-blue-400"
                                 : inMonth
-                                ? "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium"
-                                : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                ? "text-gray-800 dark:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-800/80 rounded px-0.5 font-medium"
+                                : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-0.5"
                             }`}
                           >
                             {format(day, "d")}
@@ -488,6 +541,37 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                           <ListTodo className="w-3.5 h-3.5" />
                         </button>
                       </div>
+
+                      {importantLabel ? (
+                        <button
+                          type="button"
+                          className="px-1.5 pb-1 shrink-0 text-center w-full"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImportantDayEditor({
+                              day,
+                              anchorRect: e.currentTarget.getBoundingClientRect(),
+                            });
+                          }}
+                        >
+                          <ImportantDayLabel>{importantLabel}</ImportantDayLabel>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="px-1.5 pb-0.5 shrink-0 text-left w-full text-[10px] font-medium text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                          title="Mark important day"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImportantDayEditor({
+                              day,
+                              anchorRect: e.currentTarget.getBoundingClientRect(),
+                            });
+                          }}
+                        >
+                          Mark important
+                        </button>
+                      )}
 
                       {/* Events */}
                       <div className="flex-1 px-1 pb-0.5 space-y-px mt-0.5 overflow-y-auto min-h-0">
@@ -565,6 +649,19 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
           onEdit={handleEditFromPopover}
           onDelete={handleDeleteFromPopover}
           onMoveTime={handleEventMoveTime}
+        />
+      )}
+
+      {importantDayEditor && (
+        <ImportantDayEditorPopover
+          key={format(importantDayEditor.day, "yyyy-MM-dd")}
+          day={importantDayEditor.day}
+          anchorRect={importantDayEditor.anchorRect}
+          existing={importantDays.find(
+            (d) => d.date === format(importantDayEditor.day, "yyyy-MM-dd")
+          )}
+          onClose={() => setImportantDayEditor(null)}
+          onSave={handleImportantDaySave}
         />
       )}
     </div>

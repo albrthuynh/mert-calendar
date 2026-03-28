@@ -19,7 +19,12 @@ import { EventSidebar } from "./EventSidebar";
 import { TodoSection } from "./TodoSection";
 import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
-import { CalendarEvent, Todo } from "@/types/calendar";
+import { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
+import { ImportantDayLabel } from "./ImportantDayLabel";
+import {
+  ImportantDayEditorPopover,
+  type ImportantDaySavePayload,
+} from "./ImportantDayEditorPopover";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
@@ -50,6 +55,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const currentTime = useLiveNow();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -61,6 +67,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
   const [showEventSidebar, setShowEventSidebar] = useState(false);
+
+  const [importantDayEditor, setImportantDayEditor] = useState<{
+    day: Date;
+    anchorRect: DOMRect;
+  } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
@@ -102,12 +113,18 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     const fetchAll = async () => {
       setLoadingEvents(true);
       try {
-        const [eventsRes, todosRes] = await Promise.all([
+        const startKey = format(weekStart, "yyyy-MM-dd");
+        const endKey = format(weekEnd, "yyyy-MM-dd");
+        const [eventsRes, todosRes, importantRes] = await Promise.all([
           fetch(`/api/events?start=${start}&end=${end}`),
           fetch(`/api/todos?start=${start}&end=${end}`),
+          fetch(
+            `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
+          ),
         ]);
         if (eventsRes.ok) setEvents(await eventsRes.json());
         if (todosRes.ok) setTodos(await todosRes.json());
+        if (importantRes.ok) setImportantDays(await importantRes.json());
       } catch {
         // Silently fail; user will see empty state
       } finally {
@@ -452,6 +469,38 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     });
   }, []);
 
+  const handleImportantDaySave = useCallback(
+    async (payload: ImportantDaySavePayload) => {
+      if (payload.remove) {
+        const existing = importantDays.find((d) => d.date === payload.dateKey);
+        if (!existing) return;
+        const res = await fetch(`/api/important-days/${existing.id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          setImportantDays((prev) => prev.filter((d) => d.id !== existing.id));
+        }
+        return;
+      }
+      const res = await fetch("/api/important-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: payload.dateKey,
+          label: payload.label,
+        }),
+      });
+      if (res.ok) {
+        const row: ImportantDay = await res.json();
+        setImportantDays((prev) => {
+          const rest = prev.filter((d) => d.date !== payload.dateKey);
+          return [...rest, row].sort((a, b) => a.date.localeCompare(b.date));
+        });
+      }
+    },
+    [importantDays]
+  );
+
   const weekLabel = getWeekLabel(weekStart, weekEnd);
 
   const containerStyle = backgroundUrl
@@ -542,44 +591,81 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         {weekDays.map((day) => {
           const today = isToday(day);
           const isSelected = selectedDay ? isSameDay(day, selectedDay) : false;
+          const dateKey = format(day, "yyyy-MM-dd");
+          const importantRow = importantDays.find((d) => d.date === dateKey);
+          const importantLabel = importantRow
+            ? importantRow.label.trim()
+            : "";
           return (
             <div
               key={day.toISOString()}
               className="flex-1 flex flex-col border-l border-gray-200 dark:border-gray-700 min-w-0"
             >
-              {/* Date header — click to open/toggle todo sidebar */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (isSelected && showSidebar) {
-                    setShowSidebar(false);
-                    setSelectedDay(null);
-                  } else {
-                    setSelectedDay(day);
-                    setShowSidebar(true);
-                  }
-                }}
-                className="flex flex-col items-center py-2 h-[60px] justify-center w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                <span
-                  className={`text-xs font-medium uppercase tracking-wider ${
-                    today ? "text-blue-500" : isSelected ? "text-blue-400" : "text-gray-400 dark:text-gray-500"
-                  }`}
+              <div className="relative shrink-0 group flex flex-col items-center">
+                {/* Date header — click to open/toggle todo sidebar */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSelected && showSidebar) {
+                      setShowSidebar(false);
+                      setSelectedDay(null);
+                    } else {
+                      setSelectedDay(day);
+                      setShowSidebar(true);
+                    }
+                  }}
+                  className="flex flex-col items-center py-2 min-h-[52px] justify-center w-full px-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
-                  {format(day, "EEE")}
-                </span>
-                <div
-                  className={`w-9 h-9 flex items-center justify-center rounded-full mt-0.5 text-sm font-semibold ${
-                    today
-                      ? "bg-blue-500 text-white"
-                      : isSelected
-                      ? "bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400"
-                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  {format(day, "d")}
-                </div>
-              </button>
+                  <span
+                    className={`text-xs font-medium uppercase tracking-wider ${
+                      today ? "text-blue-500" : isSelected ? "text-blue-400" : "text-gray-400 dark:text-gray-500"
+                    }`}
+                  >
+                    {format(day, "EEE")}
+                  </span>
+                  <div
+                    className={`mt-0.5 flex min-h-[1.25rem] items-center justify-center text-lg font-semibold tabular-nums ${
+                      today
+                        ? "text-blue-600 dark:text-blue-400"
+                        : isSelected
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-gray-800 dark:text-gray-200"
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </div>
+                </button>
+                {importantLabel ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImportantDayEditor({
+                        day,
+                        anchorRect: e.currentTarget.getBoundingClientRect(),
+                      });
+                    }}
+                    className="mt-0.5 w-full max-w-[min(100%,12rem)] px-1 text-center"
+                  >
+                    <ImportantDayLabel>{importantLabel}</ImportantDayLabel>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImportantDayEditor({
+                        day,
+                        anchorRect: e.currentTarget.getBoundingClientRect(),
+                      });
+                    }}
+                    title="Mark important day"
+                    className="mt-0.5 text-[10px] font-medium text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                  >
+                    Mark important
+                  </button>
+                )}
+              </div>
 
               {/* Per-day todo section */}
               <TodoSection
@@ -672,6 +758,19 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           }}
           onSave={handleEventSaved}
           onDelete={handleDeleteFromSidebar}
+        />
+      )}
+
+      {importantDayEditor && (
+        <ImportantDayEditorPopover
+          key={format(importantDayEditor.day, "yyyy-MM-dd")}
+          day={importantDayEditor.day}
+          anchorRect={importantDayEditor.anchorRect}
+          existing={importantDays.find(
+            (d) => d.date === format(importantDayEditor.day, "yyyy-MM-dd")
+          )}
+          onClose={() => setImportantDayEditor(null)}
+          onSave={handleImportantDaySave}
         />
       )}
     </div>

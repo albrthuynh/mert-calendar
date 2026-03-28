@@ -19,6 +19,14 @@ export interface CalendarEvent {
   instanceStartTime?: string | null;
 }
 
+export interface ImportantDay {
+  id: string;
+  /** YYYY-MM-DD */
+  date: string;
+  /** Short note (e.g. "Exam") */
+  label: string;
+}
+
 export interface Todo {
   id: string;
   title: string;

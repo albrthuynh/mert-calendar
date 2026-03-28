@@ -51,6 +51,19 @@ model User {
   events                   Event[]
   sessions                 Session[]
   todos                    Todo[]
+  importantDays            ImportantDay[]
+}
+
+model ImportantDay {
+  id        String   @id @default(cuid())
+  /// Calendar day in the user's local sense, stored as YYYY-MM-DD for stable queries
+  date      String
+  label     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
 }
 
 model VerificationToken {
