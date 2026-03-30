@@ -1,4 +1,4 @@
-# Albert Calendar
+# Mert Calendar
 
 A calendar I created because I did not like the feel of Google Calendar.
 
