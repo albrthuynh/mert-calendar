@@ -14,6 +14,8 @@ interface EventBlockProps {
   /** Override displayed position/size during drag preview */
   overrideStart?: Date;
   overrideEnd?: Date;
+  /** Style as a preview (semi-transparent) during drag */
+  isPreview?: boolean;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -37,6 +39,7 @@ export function EventBlock({
   onClick,
   overrideStart,
   overrideEnd,
+  isPreview = false,
 }: EventBlockProps) {
   const start = overrideStart ?? new Date(event.startTime);
   const end = overrideEnd ?? new Date(event.endTime);
@@ -58,8 +61,8 @@ export function EventBlock({
 
   const rgb = hexToRgb(event.color);
   const bgColor = rgb
-    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`
-    : `${event.color}25`;
+    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${isPreview ? 0.5 : 0.15})`
+    : `${event.color}${isPreview ? '80' : '25'}`;
   const borderColor = event.color;
 
   const isShort = height < 40;
@@ -67,7 +70,7 @@ export function EventBlock({
 
   return (
     <div
-      className="absolute cursor-pointer rounded-md px-1.5 py-0.5 overflow-hidden hover:brightness-95 transition-all group select-none"
+      className={`absolute cursor-pointer rounded-md px-1.5 py-0.5 overflow-hidden hover:brightness-95 transition-all group select-none ${isPreview ? 'shadow-lg' : ''}`}
       style={{
         top: `${top}px`,
         height: `${height}px`,

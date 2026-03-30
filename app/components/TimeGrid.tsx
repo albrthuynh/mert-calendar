@@ -1,7 +1,6 @@
 "use client";
 
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { isToday, isSameDay, startOfDay, endOfDay, format } from "date-fns";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import {
@@ -12,7 +11,7 @@ import { CalendarEvent } from "@/types/calendar";
 import { EventBlock } from "./EventBlock";
 
 const DRAG_THRESHOLD_PX = 10;
-const SNAP_MINUTES = 30;
+const SNAP_MINUTES = 15;
 const MIN_DURATION_MINUTES = 15;
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -163,15 +162,6 @@ export function TimeGrid({
   } | null>(null);
 
   const [movePreview, setMovePreview] = useState<MovePreview | null>(null);
-  const [dragClone, setDragClone] = useState<{
-    event: CalendarEvent;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    previewStartTime: Date;
-    previewEndTime: Date;
-  } | null>(null);
   const moveRef = useRef<{
     event: CalendarEvent;
     initialStart: Date;
@@ -181,8 +171,6 @@ export function TimeGrid({
     day: Date;
     isDrag: boolean;
     eventElement: HTMLElement | null;
-    cloneOffsetX: number;
-    cloneOffsetY: number;
   } | null>(null);
 
   const currentTimeTop =
@@ -349,8 +337,6 @@ export function TimeGrid({
           day,
           isDrag: false,
           eventElement: e.currentTarget as HTMLElement,
-          cloneOffsetX: 0,
-          cloneOffsetY: 0,
         };
       }
     },
@@ -400,21 +386,12 @@ export function TimeGrid({
           mov.isDrag = true;
           const grid = gridInnerRef.current;
           if (grid) grid.setPointerCapture(e.pointerId);
-          const blockEl = mov.eventElement?.firstElementChild as HTMLElement | null;
-          const elRect = blockEl?.getBoundingClientRect() ?? mov.eventElement?.getBoundingClientRect();
-          if (elRect) {
-            mov.cloneOffsetX = elRect.width / 2;
-            mov.cloneOffsetY = elRect.height / 2;
-            setDragClone({
-              event: mov.event,
-              x: e.clientX - elRect.width / 2,
-              y: e.clientY - elRect.height / 2,
-              width: elRect.width,
-              height: elRect.height,
-              previewStartTime: mov.initialStart,
-              previewEndTime: mov.initialEnd,
-            });
-          }
+          // Initialize move preview with original position
+          setMovePreview({ 
+            event: mov.event, 
+            startTime: mov.initialStart, 
+            endTime: mov.initialEnd 
+          });
         } else {
           const pos = getColumnAndLocalY(e.clientX, e.clientY);
           if (pos) {
@@ -426,41 +403,9 @@ export function TimeGrid({
               newEnd = new Date(dayEnd);
               const start = new Date(newEnd.getTime() - durationMs);
               setMovePreview({ event: mov.event, startTime: start, endTime: newEnd });
-              setDragClone((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      x: e.clientX - mov.cloneOffsetX,
-                      y: e.clientY - mov.cloneOffsetY,
-                      previewStartTime: start,
-                      previewEndTime: newEnd,
-                    }
-                  : null
-              );
             } else {
               setMovePreview({ event: mov.event, startTime: newStart, endTime: newEnd });
-              setDragClone((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      x: e.clientX - mov.cloneOffsetX,
-                      y: e.clientY - mov.cloneOffsetY,
-                      previewStartTime: newStart,
-                      previewEndTime: newEnd,
-                    }
-                  : null
-              );
             }
-          } else {
-            setDragClone((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    x: e.clientX - mov.cloneOffsetX,
-                    y: e.clientY - mov.cloneOffsetY,
-                  }
-                : null
-            );
           }
         }
       }
@@ -487,7 +432,6 @@ export function TimeGrid({
       moveRef.current = null;
       setResizePreview(null);
       setMovePreview(null);
-      setDragClone(null);
       if (res && onEventResize && resPreview) {
         onEventResize(resPreview.event, resPreview.startTime, resPreview.endTime);
       } else if (res && res.eventElement) {
@@ -518,19 +462,7 @@ export function TimeGrid({
     moveRef.current = null;
     setResizePreview(null);
     setMovePreview(null);
-    setDragClone(null);
   }, []);
-
-  function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result
-      ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16),
-        }
-      : null;
-  }
 
   return (
     <div className="relative flex-1 min-h-0 flex flex-col">
@@ -562,8 +494,11 @@ export function TimeGrid({
           let dayEvents = events.filter((ev) =>
             isSameDay(new Date(ev.startTime), day)
           );
-          if (movePreview && !dragClone) {
+          
+          // When moving an event, hide the original and show the preview at new position
+          if (movePreview) {
             const origDay = new Date(movePreview.event.startTime);
+            // Remove original event from its original day
             if (isSameDay(origDay, day)) {
               dayEvents = dayEvents.filter(
                 (ev) =>
@@ -571,6 +506,7 @@ export function TimeGrid({
                   ev.startTime !== movePreview.event.startTime
               );
             }
+            // Add preview event to the target day
             if (isSameDay(movePreview.startTime, day)) {
               dayEvents = [
                 ...dayEvents,
@@ -580,16 +516,6 @@ export function TimeGrid({
                   endTime: movePreview.endTime.toISOString(),
                 },
               ];
-            }
-          }
-          if (movePreview && dragClone) {
-            const origDay = new Date(movePreview.event.startTime);
-            if (isSameDay(origDay, day)) {
-              dayEvents = dayEvents.filter(
-                (ev) =>
-                  ev.originalId !== movePreview.event.originalId ||
-                  ev.startTime !== movePreview.event.startTime
-              );
             }
           }
           const laid = layoutEvents(dayEvents);
@@ -633,6 +559,10 @@ export function TimeGrid({
                   resizePreview &&
                   resizePreview.event.originalId === event.originalId &&
                   resizePreview.event.startTime === event.startTime;
+                const isMoving =
+                  movePreview &&
+                  movePreview.event.originalId === event.originalId &&
+                  event.startTime === movePreview.startTime.toISOString();
                 const useDirectClick =
                   event.isRecurringInstance || Boolean(event.recurrenceRule);
                 return (
@@ -663,6 +593,7 @@ export function TimeGrid({
                       overrideEnd={
                         isResizing ? resizePreview!.endTime : undefined
                       }
+                      isPreview={isMoving || undefined}
                     />
                   </div>
                 );
@@ -714,40 +645,6 @@ export function TimeGrid({
         })}
       </div>
       </div>
-      {typeof document !== "undefined" &&
-        dragClone &&
-        createPortal(
-          <div
-            className="fixed pointer-events-none z-50 rounded-md shadow-lg px-1.5 py-0.5 overflow-hidden border-l-4 flex flex-col justify-start"
-            style={{
-              left: dragClone.x,
-              top: dragClone.y,
-              width: dragClone.width,
-              height: dragClone.height,
-              backgroundColor: (() => {
-                const rgb = hexToRgb(dragClone.event.color);
-                return rgb
-                  ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`
-                  : `${dragClone.event.color}80`;
-              })(),
-              borderLeftColor: dragClone.event.color,
-            }}
-          >
-            <p
-              className="text-xs font-semibold leading-tight truncate"
-              style={{ color: dragClone.event.color }}
-            >
-              {dragClone.event.title}
-            </p>
-            <p
-              className="text-xs leading-tight truncate opacity-90"
-              style={{ color: dragClone.event.color }}
-            >
-              {format(dragClone.previewStartTime, "EEE, h:mm a")} – {format(dragClone.previewEndTime, "h:mm a")}
-            </p>
-          </div>,
-          document.body
-        )}
     </div>
   );
 }
