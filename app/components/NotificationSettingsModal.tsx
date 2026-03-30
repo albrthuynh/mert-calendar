@@ -107,9 +107,6 @@ export function NotificationSettingsModal({ initial, onSave, onClose }: Props) {
           volume: notificationVolume,
         });
       }
-      window.alert(
-        "Test reminder\n\nThis is how event reminders will appear."
-      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to show notification");
     }
