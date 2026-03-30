@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Albert Calendar
 
-## Getting Started
+A calendar I created because I did not like the feel of Google Calendar.
 
-First, run the development server:
+It is basically an aesthetic calendar + a to-do list for the specific day.
+
+This started as a project because I didn't realize Google Calendar had their tasks have due dates on them... 
+Now it's a calendar for my girlfriend and my friends, so I am officially at their mercy for whatever features get added next.
+
+## What this app does
+
+- Clean weekly and monthly calendar view with event support
+- Day-specific to-do list so tasks stay tied to real dates
+- Google sign-in with user-specific data
+- Postgres + Prisma for persistence
+
+## Tech stack
+
+- Next.js (App Router)
+- React + TypeScript
+- Prisma + PostgreSQL
+- NextAuth (Google provider)
+- Tailwind CSS
+
+## Quick start
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Create your local env file:
+
+```bash
+cp .env.example .env.local
+```
+
+If `.env.example` does not exist yet, create `.env.local` manually and add:
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DB_NAME"
+AUTH_GOOGLE_ID="your_google_oauth_client_id"
+AUTH_GOOGLE_SECRET="your_google_oauth_client_secret"
+```
+
+3. Generate Prisma client and sync your schema:
+
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+4. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Available scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - start local dev server
+- `npm run build` - build for production
+- `npm run start` - run the production build
+- `npm run lint` - run ESLint
 
-## Learn More
+## Notes
 
-To learn more about Next.js, take a look at the following resources:
+- You need a PostgreSQL database running locally or remotely.
+- You need a Google OAuth app configured for login.
+- Prisma client also generates on `npm install` via `postinstall`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Why this exists
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+I wanted a calendar that feels better to look at and nicer to use day-to-day.
 
-## Deploy on Vercel
+Google Calendar is powerful, but I wanted something more personal, a little prettier, and tightly connected to daily tasks.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+If a feature seems oddly specific, there is a good chance someone in my inner circle requested it and I folded immediately.
