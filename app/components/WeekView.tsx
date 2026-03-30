@@ -225,6 +225,24 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         );
         return;
       }
+      
+      // Optimistic update - update UI immediately
+      const previousStartTime = event.startTime;
+      const previousEndTime = event.endTime;
+      const updated = {
+        ...event,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      };
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.originalId === event.originalId && e.startTime === previousStartTime
+            ? updated
+            : e
+        )
+      );
+      
+      // Make API call in background
       const res = await fetch(`/api/events/${event.originalId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -233,22 +251,16 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           endTime: endTime.toISOString(),
         }),
       });
-      if (res.ok) {
+      
+      if (!res.ok) {
+        // Revert on failure
         setEvents((prev) =>
           prev.map((e) =>
-            e.originalId === event.originalId && e.startTime === event.startTime
-              ? {
-                  ...e,
-                  startTime: startTime.toISOString(),
-                  endTime: endTime.toISOString(),
-                }
+            e.originalId === event.originalId && e.startTime === startTime.toISOString()
+              ? { ...e, startTime: previousStartTime, endTime: previousEndTime }
               : e
           )
         );
-        const rangeStart = weekStart.toISOString();
-        const rangeEnd = weekEnd.toISOString();
-        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
-        if (eventsRes.ok) setEvents(await eventsRes.json());
       }
     },
     [weekStart, weekEnd]
@@ -276,6 +288,23 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         );
         return;
       }
+      
+      // Optimistic update - update UI immediately
+      const previousStartTime = event.startTime;
+      const updated = {
+        ...event,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      };
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.originalId === event.originalId && e.startTime === previousStartTime
+            ? updated
+            : e
+        )
+      );
+      
+      // Make API call in background
       const res = await fetch(`/api/events/${event.originalId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -284,22 +313,16 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           endTime: endTime.toISOString(),
         }),
       });
-      if (res.ok) {
+      
+      if (!res.ok) {
+        // Revert on failure
         setEvents((prev) =>
           prev.map((e) =>
-            e.originalId === event.originalId && e.startTime === event.startTime
-              ? {
-                  ...e,
-                  startTime: startTime.toISOString(),
-                  endTime: endTime.toISOString(),
-                }
+            e.originalId === event.originalId && e.startTime === startTime.toISOString()
+              ? { ...e, startTime: previousStartTime, endTime: event.endTime }
               : e
           )
         );
-        const rangeStart = weekStart.toISOString();
-        const rangeEnd = weekEnd.toISOString();
-        const eventsRes = await fetch(`/api/events?start=${rangeStart}&end=${rangeEnd}`);
-        if (eventsRes.ok) setEvents(await eventsRes.json());
       }
     },
     [weekStart, weekEnd]
