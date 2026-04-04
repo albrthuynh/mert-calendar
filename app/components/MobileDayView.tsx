@@ -284,7 +284,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       style={containerStyle}
     >
       {/* Week Selector */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <button
           type="button"
           onClick={goToPrevWeek}
@@ -333,7 +333,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Current Day Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
             {format(currentDay, "EEEE")}
@@ -357,7 +357,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Tabs */}
-      <div className="px-4 pt-3 pb-2 bg-white/90 dark:bg-gray-900/90 border-b border-gray-200 dark:border-gray-800 shrink-0">
+      <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-800 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
             <CalendarIcon className="w-3.5 h-3.5" />
@@ -391,7 +391,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]">
         {activeTab === "todos" ? (
           <div className="h-full flex flex-col">
             <div className="px-4 pt-3 pb-2 flex items-center justify-between">

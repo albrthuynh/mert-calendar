@@ -16,6 +16,7 @@ interface TodoSectionProps {
   onEdit: (id: string, title: string) => void;
   onUpdate: (todo: Todo) => void;
   onMoveDay: (id: string, day: Date) => void;
+  hasBackground?: boolean;
 }
 
 const TODO_COLLAPSED_STORAGE_KEY = "albert-calendar-todo-collapsed";
@@ -53,6 +54,7 @@ export function TodoSection({
   onEdit,
   onUpdate,
   onMoveDay,
+  hasBackground,
 }: TodoSectionProps) {
   const [collapsed, setCollapsed] = useState(() => getStoredCollapsed(day));
   const [showModal, setShowModal] = useState(false);
@@ -87,7 +89,11 @@ export function TodoSection({
         {hasAny && (
           <button
             onClick={handleToggleCollapsed}
-            className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className={`p-0.5 rounded transition-colors ${
+              hasBackground
+                ? "text-white/70 hover:text-white"
+                : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+            }`}
             aria-label={collapsed ? "Expand todos" : "Collapse todos"}
           >
             {collapsed ? (
@@ -98,14 +104,20 @@ export function TodoSection({
           </button>
         )}
         {hasAny && (
-          <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+          <span className={`text-xs tabular-nums ${
+            hasBackground ? "text-white/70" : "text-gray-400 dark:text-gray-500"
+          }`}>
             {completedCount}/{dayTodos.length}
           </span>
         )}
         <div className="flex-1" />
         <button
           onClick={() => setShowModal(true)}
-          className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors"
+          className={`p-0.5 rounded transition-colors ${
+            hasBackground
+              ? "text-white/70 hover:text-white"
+              : "text-gray-400 dark:text-gray-500 hover:text-blue-500"
+          }`}
           aria-label="Add to-do"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -123,6 +135,7 @@ export function TodoSection({
               onDelete={onDelete}
               onEdit={onEdit}
               onUpdate={onUpdate}
+              hasBackground={hasBackground}
             />
           ))}
         </div>

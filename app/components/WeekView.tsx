@@ -540,7 +540,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       style={containerStyle}
     >
       {/* Week navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         <button
           type="button"
           onClick={goToToday}
@@ -601,11 +601,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       </div>
 
       {/* Calendar + optional sidebar */}
-      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]">
       <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
 
       {/* Day headers + todo sections */}
-      <div className="flex min-w-0 overflow-x-hidden border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+      <div className="flex min-w-0 overflow-x-hidden border-b border-gray-200 dark:border-gray-700 shrink-0">
         {/* Time gutter spacer */}
         <div className="w-14 shrink-0 flex flex-col">
           <div className="h-[60px]" />
@@ -641,7 +641,13 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                 >
                   <span
                     className={`text-xs font-medium uppercase tracking-wider ${
-                      today ? "text-blue-500" : isSelected ? "text-blue-400" : "text-gray-400 dark:text-gray-500"
+                      today 
+                        ? "text-blue-500" 
+                        : isSelected 
+                        ? "text-blue-400" 
+                        : backgroundUrl
+                        ? "text-white"
+                        : "text-gray-400 dark:text-gray-500"
                     }`}
                   >
                     {format(day, "EEE")}
@@ -652,6 +658,8 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                         ? "text-blue-600 dark:text-blue-400"
                         : isSelected
                         ? "text-blue-600 dark:text-blue-400"
+                        : backgroundUrl
+                        ? "text-white"
                         : "text-gray-800 dark:text-gray-200"
                     }`}
                   >
@@ -670,7 +678,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                     }}
                     className="mt-0.5 w-full max-w-[min(100%,12rem)] px-1 text-center"
                   >
-                    <ImportantDayLabel>{importantLabel}</ImportantDayLabel>
+                    <ImportantDayLabel hasBackground={!!backgroundUrl}>{importantLabel}</ImportantDayLabel>
                   </button>
                 ) : (
                   <button
@@ -683,7 +691,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                       });
                     }}
                     title="Mark important day"
-                    className="mt-0.5 text-[10px] font-medium text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                    className={`mt-0.5 text-[10px] font-medium opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 ${
+                      backgroundUrl
+                        ? "text-white/60 hover:text-white"
+                        : "text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300"
+                    }`}
                   >
                     Mark important
                   </button>
@@ -700,6 +712,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                 onEdit={handleTodoEdit}
                 onUpdate={handleTodoUpdate}
                 onMoveDay={handleTodoMoveDay}
+                hasBackground={!!backgroundUrl}
               />
             </div>
           );
@@ -718,6 +731,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           onSlotDragCreate={handleSlotDragCreate}
           onEventResize={handleEventResize}
           onEventMove={handleEventMove}
+          hasBackground={!!backgroundUrl}
         />
       )}
 

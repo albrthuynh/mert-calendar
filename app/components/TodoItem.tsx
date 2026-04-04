@@ -13,6 +13,7 @@ interface TodoItemProps {
   onEdit: (id: string, title: string) => void;
   variant?: "embedded" | "sidebar";
   onUpdate: (todo: Todo) => void;
+  hasBackground?: boolean;
 }
 
 export function TodoItem({
@@ -22,6 +23,7 @@ export function TodoItem({
   onEdit,
   variant = "embedded",
   onUpdate,
+  hasBackground,
 }: TodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(todo.title);
@@ -109,9 +111,13 @@ export function TodoItem({
                 variant === "sidebar" ? "text-sm wrap-break-word" : "text-xs truncate"
               } ${
                 todo.completed
-                  ? "line-through text-gray-400 dark:text-gray-600"
+                  ? hasBackground 
+                    ? "line-through text-white/40"
+                    : "line-through text-gray-400 dark:text-gray-600"
                   : isOverdue
                   ? "text-red-600 dark:text-red-400"
+                  : hasBackground
+                  ? "text-white"
                   : "text-gray-700 dark:text-gray-300"
               }`}
               title={todo.title}
@@ -131,7 +137,11 @@ export function TodoItem({
       {!editing && dueDate && (
         <span
           className={`mt-0.5 flex items-center gap-0.5 text-xs shrink-0 tabular-nums ${
-            isOverdue ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-gray-500"
+            isOverdue 
+              ? "text-red-500 dark:text-red-400" 
+              : hasBackground
+              ? "text-white/70"
+              : "text-gray-400 dark:text-gray-500"
           }`}
         >
           <Clock className="w-2.5 h-2.5" />
@@ -143,7 +153,11 @@ export function TodoItem({
       {!editing && (
         <button
           onClick={() => setShowDetailsModal(true)}
-          className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+          className={`mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${
+            hasBackground
+              ? "text-white/70 hover:text-white"
+              : "text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400"
+          }`}
           aria-label="Edit to-do details"
         >
           <Pencil className="w-3 h-3" />
@@ -153,7 +167,11 @@ export function TodoItem({
       {/* Delete button */}
       <button
         onClick={() => onDelete(todo.id)}
-        className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all"
+        className={`mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${
+          hasBackground
+            ? "text-white/70 hover:text-white"
+            : "text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+        }`}
         aria-label="Delete"
       >
         <Trash2 className="w-3 h-3" />

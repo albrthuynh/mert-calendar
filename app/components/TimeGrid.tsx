@@ -122,6 +122,7 @@ interface TimeGridProps {
   onSlotDragCreate?: (start: Date, end: Date, day: Date) => void;
   onEventResize?: (event: CalendarEvent, startTime: Date, endTime: Date) => void;
   onEventMove?: (event: CalendarEvent, startTime: Date, endTime: Date) => void;
+  hasBackground?: boolean;
 }
 
 const TIME_LABEL_WIDTH = 56; // w-14
@@ -136,6 +137,7 @@ export function TimeGrid({
   onSlotDragCreate,
   onEventResize,
   onEventMove,
+  hasBackground,
 }: TimeGridProps) {
   const gridInnerRef = useRef<HTMLDivElement>(null);
   const [createPreview, setCreatePreview] = useState<CreatePreview | null>(null);
@@ -480,7 +482,9 @@ export function TimeGrid({
           {HOURS.map((hour) => (
         <div
             key={hour}
-            className="absolute right-2 text-xs text-gray-400 dark:text-gray-600 leading-none"
+            className={`absolute right-2 text-xs leading-none ${
+              hasBackground ? "text-white" : "text-gray-400 dark:text-gray-600"
+            }`}
             style={{ top: `${hour * HOUR_HEIGHT - 7}px` }}
           >
               {hourLabel(hour)}

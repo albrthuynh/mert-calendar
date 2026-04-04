@@ -392,7 +392,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       style={containerStyle}
     >
       {/* Navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         <button
           onClick={goToToday}
           className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
@@ -449,10 +449,10 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       </div>
 
       {/* Calendar + sidebar */}
-      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]">
         <div className="flex flex-col flex-1 overflow-hidden min-h-0">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+          <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 shrink-0">
             {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
               <div
                 key={d}
@@ -488,14 +488,16 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                     <div
                       key={day.toISOString()}
                       className={`group relative border-r border-gray-200 dark:border-gray-700 last:border-r-0 flex flex-col min-h-0 overflow-hidden cursor-pointer transition-colors ${
-                        inMonth
+                        backgroundUrl
+                          ? "bg-transparent"
+                          : inMonth
                           ? "bg-white dark:bg-gray-900"
                           : "bg-gray-50/80 dark:bg-gray-950/50"
                       } ${
                         isSelected
                           ? "ring-2 ring-inset ring-blue-400 dark:ring-blue-500"
                           : ""
-                      } hover:bg-gray-50 dark:hover:bg-gray-800/50`}
+                      } ${backgroundUrl ? "" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"}`}
                       onClick={() => handleDayClick(day)}
                     >
                       {/* Day number + to-dos toggle */}
@@ -515,6 +517,8 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                             className={`min-w-[1.25rem] flex items-center justify-center text-base font-semibold tabular-nums transition-colors shrink-0 ${
                               today
                                 ? "text-blue-600 dark:text-blue-400"
+                                : backgroundUrl
+                                ? "text-white hover:bg-white/10 rounded px-0.5"
                                 : inMonth
                                 ? "text-gray-800 dark:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-800/80 rounded px-0.5 font-medium"
                                 : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-0.5"
@@ -534,7 +538,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                               setShowSidebar(true);
                             }
                           }}
-                          className="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors shrink-0"
+                          className={`p-0.5 rounded transition-colors shrink-0 ${
+                            backgroundUrl
+                              ? "text-white/70 hover:text-white hover:bg-white/10"
+                              : "text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                          }`}
                           aria-label={isSelected && showSidebar ? "Close to-dos" : `View to-dos for ${format(day, "MMMM d")}`}
                           title={isSelected && showSidebar ? "Close to-dos" : "View to-dos"}
                         >
@@ -554,12 +562,16 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                             });
                           }}
                         >
-                          <ImportantDayLabel>{importantLabel}</ImportantDayLabel>
+                          <ImportantDayLabel hasBackground={!!backgroundUrl}>{importantLabel}</ImportantDayLabel>
                         </button>
                       ) : (
                         <button
                           type="button"
-                          className="px-1.5 pb-0.5 shrink-0 text-left w-full text-[10px] font-medium text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                          className={`px-1.5 pb-0.5 shrink-0 text-left w-full text-[10px] font-medium transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100 ${
+                            backgroundUrl
+                              ? "text-white/60 hover:text-white"
+                              : "text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300"
+                          }`}
                           title="Mark important day"
                           onClick={(e) => {
                             e.stopPropagation();

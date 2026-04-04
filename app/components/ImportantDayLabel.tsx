@@ -3,22 +3,25 @@
 interface ImportantDayLabelProps {
   children: string;
   className?: string;
+  hasBackground?: boolean;
 }
 
 /** Centered pill like calendar apps: blue dot + uppercase label on translucent backdrop. */
-export function ImportantDayLabel({ children, className = "" }: ImportantDayLabelProps) {
+export function ImportantDayLabel({ children, className = "", hasBackground }: ImportantDayLabelProps) {
   return (
     <span
       title={children}
       className={`flex w-full max-w-full items-center justify-center gap-1.5 rounded-md px-2 py-1
-        bg-white/70 backdrop-blur-sm dark:bg-slate-900/45
+        ${hasBackground ? "bg-transparent" : "bg-white/20 backdrop-blur-[2px] dark:bg-slate-900/15"}
         ${className}`}
     >
       <span
         className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
         aria-hidden
       />
-      <span className="min-w-0 truncate text-center text-[14px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+      <span className={`min-w-0 truncate text-center text-[14px] font-medium uppercase tracking-wide ${
+        hasBackground ? "text-white" : "text-gray-700 dark:text-gray-300"
+      }`}>
         {children}
       </span>
     </span>
