@@ -111,13 +111,13 @@ export function TodoItem({
                 variant === "sidebar" ? "text-sm wrap-break-word" : "text-xs truncate"
               } ${
                 todo.completed
-                  ? hasBackground 
-                    ? "line-through text-white/40"
+                  ? hasBackground
+                    ? "line-through text-gray-500 dark:text-white/40"
                     : "line-through text-gray-400 dark:text-gray-600"
                   : isOverdue
                   ? "text-red-600 dark:text-red-400"
                   : hasBackground
-                  ? "text-white"
+                  ? "text-gray-900 dark:text-white"
                   : "text-gray-700 dark:text-gray-300"
               }`}
               title={todo.title}
@@ -137,10 +137,10 @@ export function TodoItem({
       {!editing && dueDate && (
         <span
           className={`mt-0.5 flex items-center gap-0.5 text-xs shrink-0 tabular-nums ${
-            isOverdue 
-              ? "text-red-500 dark:text-red-400" 
+            isOverdue
+              ? "text-red-500 dark:text-red-400"
               : hasBackground
-              ? "text-white/70"
+              ? "text-gray-700 dark:text-white/70"
               : "text-gray-400 dark:text-gray-500"
           }`}
         >
@@ -155,7 +155,7 @@ export function TodoItem({
           onClick={() => setShowDetailsModal(true)}
           className={`mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${
             hasBackground
-              ? "text-white/70 hover:text-white"
+              ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
               : "text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400"
           }`}
           aria-label="Edit to-do details"
@@ -169,7 +169,7 @@ export function TodoItem({
         onClick={() => onDelete(todo.id)}
         className={`mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${
           hasBackground
-            ? "text-white/70 hover:text-white"
+            ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
             : "text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
         }`}
         aria-label="Delete"

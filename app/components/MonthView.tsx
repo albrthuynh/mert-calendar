@@ -516,9 +516,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                             }}
                             className={`min-w-[1.25rem] flex items-center justify-center text-base font-semibold tabular-nums transition-colors shrink-0 ${
                               today
-                                ? "text-blue-600 dark:text-blue-400"
+                                ? backgroundUrl
+                                  ? "text-blue-900 dark:text-blue-400"
+                                  : "text-blue-600 dark:text-blue-400"
                                 : backgroundUrl
-                                ? "text-white hover:bg-white/10 rounded px-0.5"
+                                ? "text-gray-900 hover:bg-black/5 dark:text-white dark:hover:bg-white/10 rounded px-0.5"
                                 : inMonth
                                 ? "text-gray-800 dark:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-800/80 rounded px-0.5 font-medium"
                                 : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-0.5"
@@ -540,7 +542,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                           }}
                           className={`p-0.5 rounded transition-colors shrink-0 ${
                             backgroundUrl
-                              ? "text-white/70 hover:text-white hover:bg-white/10"
+                              ? "text-gray-700 hover:text-gray-900 hover:bg-black/5 dark:text-white/70 dark:hover:text-white dark:hover:bg-white/10"
                               : "text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                           }`}
                           aria-label={isSelected && showSidebar ? "Close to-dos" : `View to-dos for ${format(day, "MMMM d")}`}
@@ -569,7 +571,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                           type="button"
                           className={`px-1.5 pb-0.5 shrink-0 text-left w-full text-[10px] font-medium transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100 ${
                             backgroundUrl
-                              ? "text-white/60 hover:text-white"
+                              ? "text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white"
                               : "text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300"
                           }`}
                           title="Mark important day"

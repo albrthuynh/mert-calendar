@@ -748,12 +748,16 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                 >
                   <span
                     className={`text-xs font-medium uppercase tracking-wider ${
-                      today 
-                        ? "text-blue-500" 
-                        : isSelected 
-                        ? "text-blue-400" 
+                      today
+                        ? backgroundUrl
+                          ? "text-blue-800 dark:text-blue-400"
+                          : "text-blue-500"
+                        : isSelected
+                        ? backgroundUrl
+                          ? "text-blue-800 dark:text-blue-400"
+                          : "text-blue-400"
                         : backgroundUrl
-                        ? "text-white"
+                        ? "text-gray-900 dark:text-white"
                         : "text-gray-400 dark:text-gray-500"
                     }`}
                   >
@@ -762,11 +766,15 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                   <div
                     className={`mt-0.5 flex min-h-[1.25rem] items-center justify-center text-lg font-semibold tabular-nums ${
                       today
-                        ? "text-blue-600 dark:text-blue-400"
+                        ? backgroundUrl
+                          ? "text-blue-900 dark:text-blue-400"
+                          : "text-blue-600 dark:text-blue-400"
                         : isSelected
-                        ? "text-blue-600 dark:text-blue-400"
+                        ? backgroundUrl
+                          ? "text-blue-900 dark:text-blue-400"
+                          : "text-blue-600 dark:text-blue-400"
                         : backgroundUrl
-                        ? "text-white"
+                        ? "text-gray-900 dark:text-white"
                         : "text-gray-800 dark:text-gray-200"
                     }`}
                   >
@@ -800,7 +808,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
                     title="Mark important day"
                     className={`mt-0.5 text-[10px] font-medium opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 ${
                       backgroundUrl
-                        ? "text-white/60 hover:text-white"
+                        ? "text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white"
                         : "text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300"
                     }`}
                   >

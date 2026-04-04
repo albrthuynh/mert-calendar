@@ -91,7 +91,7 @@ export function TodoSection({
             onClick={handleToggleCollapsed}
             className={`p-0.5 rounded transition-colors ${
               hasBackground
-                ? "text-white/70 hover:text-white"
+                ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
                 : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
             }`}
             aria-label={collapsed ? "Expand todos" : "Collapse todos"}
@@ -105,7 +105,9 @@ export function TodoSection({
         )}
         {hasAny && (
           <span className={`text-xs tabular-nums ${
-            hasBackground ? "text-white/70" : "text-gray-400 dark:text-gray-500"
+            hasBackground
+              ? "text-gray-700 dark:text-white/70"
+              : "text-gray-400 dark:text-gray-500"
           }`}>
             {completedCount}/{dayTodos.length}
           </span>
@@ -115,7 +117,7 @@ export function TodoSection({
           onClick={() => setShowModal(true)}
           className={`p-0.5 rounded transition-colors ${
             hasBackground
-              ? "text-white/70 hover:text-white"
+              ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
               : "text-gray-400 dark:text-gray-500 hover:text-blue-500"
           }`}
           aria-label="Add to-do"

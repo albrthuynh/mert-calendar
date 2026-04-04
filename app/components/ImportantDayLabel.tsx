@@ -20,7 +20,9 @@ export function ImportantDayLabel({ children, className = "", hasBackground }: I
         aria-hidden
       />
       <span className={`min-w-0 truncate text-center text-[14px] font-medium uppercase tracking-wide ${
-        hasBackground ? "text-white" : "text-gray-700 dark:text-gray-300"
+        hasBackground
+          ? "text-gray-900 dark:text-white"
+          : "text-gray-700 dark:text-gray-300"
       }`}>
         {children}
       </span>

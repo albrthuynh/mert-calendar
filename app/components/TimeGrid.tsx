@@ -493,7 +493,9 @@ export function TimeGrid({
         <div
             key={hour}
             className={`absolute right-2 text-xs leading-none ${
-              hasBackground ? "text-white" : "text-gray-400 dark:text-gray-600"
+              hasBackground
+                ? "text-gray-900 dark:text-white"
+                : "text-gray-400 dark:text-gray-600"
             }`}
             style={{ top: `${hour * HOUR_HEIGHT - 7}px` }}
           >
