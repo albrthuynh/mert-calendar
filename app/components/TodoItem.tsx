@@ -53,9 +53,9 @@ export function TodoItem({
   return (
     <div
       className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-full"
-      draggable={isEmbedded}
+      draggable={isEmbedded && !editing && !showDetailsModal}
       onDragStart={(e) => {
-        if (!isEmbedded) return;
+        if (!isEmbedded || editing || showDetailsModal) return;
         e.dataTransfer.setData("text/plain", todo.id);
         e.dataTransfer.effectAllowed = "move";
       }}

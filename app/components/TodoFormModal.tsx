@@ -121,7 +121,11 @@ export function TodoFormModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden border border-gray-100 dark:border-gray-700">
+      <div 
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden border border-gray-100 dark:border-gray-700"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+      >
         <div className="flex items-center justify-between px-6 pt-5 pb-4">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             {isEditing ? "Edit to-do" : "New to-do"}
@@ -141,7 +145,8 @@ export function TodoFormModal({
             placeholder="What needs to be done?"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full border-b-2 border-gray-200 dark:border-gray-700 focus:border-blue-500 outline-none text-lg font-medium py-1 placeholder-gray-400 dark:placeholder-gray-600 bg-transparent text-gray-900 dark:text-gray-100 transition-colors"
+            draggable={false}
+            className="w-full border-b-2 border-gray-200 dark:border-gray-700 focus:border-blue-500 outline-none text-lg font-medium py-1 placeholder-gray-400 dark:placeholder-gray-600 bg-transparent text-gray-900 dark:text-gray-100 transition-colors select-text"
           />
 
           {/* Date (always required) */}
@@ -188,7 +193,8 @@ export function TodoFormModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            draggable={false}
+            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none select-text"
           />
 
           {error && (
