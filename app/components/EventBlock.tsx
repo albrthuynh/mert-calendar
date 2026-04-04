@@ -66,11 +66,14 @@ export function EventBlock({
   const borderColor = event.color;
 
   const isShort = height < 40;
-  const canResizeOrMove = !event.isRecurringInstance && !event.recurrenceRule;
+  const isRecurring = event.isRecurringInstance || Boolean(event.recurrenceRule);
+  const canResize = !isRecurring;
 
   return (
     <div
-      className={`absolute cursor-pointer rounded-md px-1.5 py-0.5 overflow-hidden hover:brightness-95 transition-all group select-none ${isPreview ? 'shadow-lg' : ''}`}
+      className={`absolute rounded-md px-1.5 py-0.5 overflow-hidden hover:brightness-95 transition-all group select-none ${
+        isRecurring ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+      } ${isPreview ? "shadow-lg" : ""}`}
       style={{
         top: `${top}px`,
         height: `${height}px`,
@@ -86,7 +89,7 @@ export function EventBlock({
       }}
     >
       {/* Top resize handle - hit area for TimeGrid to detect */}
-      {canResizeOrMove && height > RESIZE_HANDLE_HEIGHT * 2 && (
+      {canResize && height > RESIZE_HANDLE_HEIGHT * 2 && (
         <div
           data-resize="start"
           className="absolute left-0 right-0 top-0 cursor-n-resize z-10"
@@ -110,7 +113,7 @@ export function EventBlock({
       )}
 
       {/* Bottom resize handle */}
-      {canResizeOrMove && height > RESIZE_HANDLE_HEIGHT * 2 && (
+      {canResize && height > RESIZE_HANDLE_HEIGHT * 2 && (
         <div
           data-resize="end"
           className="absolute left-0 right-0 bottom-0 cursor-n-resize z-10"

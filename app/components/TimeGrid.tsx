@@ -174,6 +174,8 @@ export function TimeGrid({
     isDrag: boolean;
     eventElement: HTMLElement | null;
   } | null>(null);
+  const resizePreviewRef = useRef<ResizePreview | null>(null);
+  const movePreviewRef = useRef<MovePreview | null>(null);
 
   const currentTimeTop =
     currentTime === null
@@ -295,7 +297,6 @@ export function TimeGrid({
 
   const handleEventWrapperPointerDown = useCallback(
     (e: React.PointerEvent, event: CalendarEvent, day: Date) => {
-      if (event.isRecurringInstance || event.recurrenceRule) return;
       e.stopPropagation();
       const target = e.target as HTMLElement;
       const resizeStart = target.closest('[data-resize="start"]');
@@ -388,12 +389,13 @@ export function TimeGrid({
           mov.isDrag = true;
           const grid = gridInnerRef.current;
           if (grid) grid.setPointerCapture(e.pointerId);
-          // Initialize move preview with original position
-          setMovePreview({ 
-            event: mov.event, 
-            startTime: mov.initialStart, 
-            endTime: mov.initialEnd 
-          });
+          const initialPreview: MovePreview = {
+            event: mov.event,
+            startTime: mov.initialStart,
+            endTime: mov.initialEnd,
+          };
+          movePreviewRef.current = initialPreview;
+          setMovePreview(initialPreview);
         } else {
           const pos = getColumnAndLocalY(e.clientX, e.clientY);
           if (pos) {
@@ -401,13 +403,16 @@ export function TimeGrid({
             const durationMs = mov.initialEnd.getTime() - mov.initialStart.getTime();
             let newEnd = new Date(newStart.getTime() + durationMs);
             const dayEnd = endOfDay(pos.day);
+            let next: MovePreview;
             if (newEnd > dayEnd) {
               newEnd = new Date(dayEnd);
               const start = new Date(newEnd.getTime() - durationMs);
-              setMovePreview({ event: mov.event, startTime: start, endTime: newEnd });
+              next = { event: mov.event, startTime: start, endTime: newEnd };
             } else {
-              setMovePreview({ event: mov.event, startTime: newStart, endTime: newEnd });
+              next = { event: mov.event, startTime: newStart, endTime: newEnd };
             }
+            movePreviewRef.current = next;
+            setMovePreview(next);
           }
         }
       }
@@ -415,8 +420,6 @@ export function TimeGrid({
     [getColumnAndLocalY, scrollRef]
   );
 
-  const resizePreviewRef = useRef<ResizePreview | null>(null);
-  const movePreviewRef = useRef<MovePreview | null>(null);
   useEffect(() => {
     resizePreviewRef.current = resizePreview;
     movePreviewRef.current = movePreview;
@@ -446,10 +449,17 @@ export function TimeGrid({
           movPreview &&
           mov.initialStart.getTime() === movPreview.startTime.getTime() &&
           mov.initialEnd.getTime() === movPreview.endTime.getTime();
-        if (mov.isDrag && movPreview && onEventMove && !sameSlot) {
+        const committedMove =
+          mov.isDrag && movPreview && onEventMove && !sameSlot;
+        if (committedMove) {
           onEventMove(movPreview.event, movPreview.startTime, movPreview.endTime);
-        } else if ((!mov.isDrag || sameSlot) && mov.eventElement) {
-          const rect = (mov.eventElement.firstElementChild as HTMLElement)?.getBoundingClientRect?.() ?? mov.eventElement.getBoundingClientRect();
+        } else if (
+          (!mov.isDrag || sameSlot || !movPreview) &&
+          mov.eventElement
+        ) {
+          const rect =
+            (mov.eventElement.firstElementChild as HTMLElement)?.getBoundingClientRect?.() ??
+            mov.eventElement.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
             onEventClick(mov.event, rect);
           }
@@ -567,8 +577,6 @@ export function TimeGrid({
                   movePreview &&
                   movePreview.event.originalId === event.originalId &&
                   event.startTime === movePreview.startTime.toISOString();
-                const useDirectClick =
-                  event.isRecurringInstance || Boolean(event.recurrenceRule);
                 return (
                   <div
                     key={`${event.originalId}-${event.startTime}`}
@@ -583,14 +591,9 @@ export function TimeGrid({
                       dayStart={day}
                       columnIndex={column}
                       totalColumns={totalColumns}
-                      onClick={
-                        useDirectClick
-                          ? onEventClick
-                          : () => {
-                              // Non-recurring events are click-handled by pointer-up logic
-                              // to support drag/move/resize without duplicate click events.
-                            }
-                      }
+                      onClick={() => {
+                        /* Opens via grid pointer-up so click/drag don't fight */
+                      }}
                       overrideStart={
                         isResizing ? resizePreview!.startTime : undefined
                       }

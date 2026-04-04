@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight, ListTodo } from "lucide-react";
 import { TimeGrid } from "./TimeGrid";
+import { RecurringEventMoveModal } from "./RecurringEventMoveModal";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { EventSidebar } from "./EventSidebar";
@@ -72,6 +73,14 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     day: Date;
     anchorRect: DOMRect;
   } | null>(null);
+
+  const [recurringMovePending, setRecurringMovePending] = useState<{
+    event: CalendarEvent;
+    startTime: Date;
+    endTime: Date;
+  } | null>(null);
+  const [recurringMoveBusy, setRecurringMoveBusy] = useState(false);
+  const [recurringMoveError, setRecurringMoveError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
@@ -268,6 +277,12 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
 
   const handleEventMove = useCallback(
     async (event: CalendarEvent, startTime: Date, endTime: Date) => {
+      if (event.isRecurringInstance && event.recurrenceRule) {
+        setRecurringMoveError(null);
+        setRecurringMovePending({ event, startTime, endTime });
+        return;
+      }
+
       if (event.originalId.startsWith("temp-")) {
         const updated = {
           ...event,
@@ -334,6 +349,98 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     const res = await fetch(`/api/events?start=${start}&end=${end}`);
     if (res.ok) setEvents(await res.json());
   }, [weekStart, weekEnd]);
+
+  const applyRecurringMoveThisOnly = useCallback(async () => {
+    if (!recurringMovePending) return;
+    const { event, startTime, endTime } = recurringMovePending;
+    const instanceStartTime =
+      event.instanceStartTime ?? event.startTime;
+    setRecurringMoveBusy(true);
+    setRecurringMoveError(null);
+    try {
+      const res = await fetch(`/api/events/${event.originalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          editScope: "single",
+          instanceStartTime,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          reminderDisabled: event.reminderDisabled,
+          reminderMinutes: event.reminderMinutes,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let message = "Could not move this occurrence";
+        try {
+          message = JSON.parse(text).error ?? message;
+        } catch {
+          /* use default */
+        }
+        throw new Error(message);
+      }
+      setRecurringMovePending(null);
+      await refreshEvents();
+    } catch (e) {
+      setRecurringMoveError(
+        e instanceof Error ? e.message : "Something went wrong"
+      );
+    } finally {
+      setRecurringMoveBusy(false);
+    }
+  }, [recurringMovePending, refreshEvents]);
+
+  const applyRecurringMoveAll = useCallback(async () => {
+    if (!recurringMovePending) return;
+    const { event, startTime } = recurringMovePending;
+    setRecurringMoveBusy(true);
+    setRecurringMoveError(null);
+    try {
+      const parentRes = await fetch(`/api/events/${event.originalId}`);
+      if (!parentRes.ok) {
+        throw new Error("Could not load the series");
+      }
+      const parent = (await parentRes.json()) as {
+        startTime: string;
+        endTime: string;
+      };
+      const deltaMs =
+        startTime.getTime() - new Date(event.startTime).getTime();
+      const newSeriesStart = new Date(
+        new Date(parent.startTime).getTime() + deltaMs
+      );
+      const newSeriesEnd = new Date(
+        new Date(parent.endTime).getTime() + deltaMs
+      );
+      const res = await fetch(`/api/events/${event.originalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startTime: newSeriesStart.toISOString(),
+          endTime: newSeriesEnd.toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let message = "Could not move the series";
+        try {
+          message = JSON.parse(text).error ?? message;
+        } catch {
+          /* use default */
+        }
+        throw new Error(message);
+      }
+      setRecurringMovePending(null);
+      await refreshEvents();
+    } catch (e) {
+      setRecurringMoveError(
+        e instanceof Error ? e.message : "Something went wrong"
+      );
+    } finally {
+      setRecurringMoveBusy(false);
+    }
+  }, [recurringMovePending, refreshEvents]);
 
   const handleEventSaved = useCallback(
     async (_saved: CalendarEvent) => {
@@ -753,6 +860,22 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       </div>{/* end calendar + sidebar wrapper */}
 
       {/* Create / Edit event modal (slot click or edit from popover) */}
+      {recurringMovePending && (
+        <RecurringEventMoveModal
+          eventTitle={recurringMovePending.event.title}
+          busy={recurringMoveBusy}
+          error={recurringMoveError}
+          onClose={() => {
+            if (!recurringMoveBusy) {
+              setRecurringMovePending(null);
+              setRecurringMoveError(null);
+            }
+          }}
+          onChooseThisOnly={applyRecurringMoveThisOnly}
+          onChooseAll={applyRecurringMoveAll}
+        />
+      )}
+
       {showEventModal && (
         <EventFormModal
           initialStartTime={createDate}
