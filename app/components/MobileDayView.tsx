@@ -278,13 +278,19 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       }
     : undefined;
 
+  const overBackgroundClass = backgroundUrl
+    ? "bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]"
+    : "";
+
   return (
     <div
       className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900"
       style={containerStyle}
     >
       {/* Week Selector */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+      <div
+        className={`flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 ${overBackgroundClass}`}
+      >
         <button
           type="button"
           onClick={goToPrevWeek}
@@ -357,7 +363,9 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Tabs */}
-      <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-800 shrink-0">
+      <div
+        className={`px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-800 shrink-0 ${overBackgroundClass}`}
+      >
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
             <CalendarIcon className="w-3.5 h-3.5" />
