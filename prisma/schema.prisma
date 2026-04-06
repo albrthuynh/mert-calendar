@@ -45,6 +45,7 @@ model User {
   notificationSoundEnabled Boolean   @default(true)
   notificationSound        String?
   notificationVolume       Int       @default(80)
+  calendarSubscriptionToken String?  @unique @default(cuid())
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
   accounts                 Account[]

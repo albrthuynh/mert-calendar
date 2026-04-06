@@ -27,6 +27,7 @@ export async function GET() {
       notificationSoundEnabled: true,
       notificationSound: true,
       notificationVolume: true,
+      calendarSubscriptionToken: true,
     },
   });
 
@@ -43,6 +44,7 @@ export async function GET() {
     notificationSoundEnabled: user.notificationSoundEnabled,
     notificationSound: user.notificationSound ?? null,
     notificationVolume: user.notificationVolume,
+    calendarSubscriptionToken: user.calendarSubscriptionToken ?? null,
   });
 }
 

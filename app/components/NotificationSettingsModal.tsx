@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { playNotificationSound, normalizeSoundId } from "@/lib/notificationSound";
 import type { NotificationPreferences } from "../context/NotificationPreferencesContext";
+import { Copy, Check } from "lucide-react";
 
 const REMINDER_OPTIONS_MINUTES = [0, 5, 10, 15, 30, 60] as const;
 const SOUND_OPTIONS = [
@@ -43,11 +44,32 @@ export function NotificationSettingsModal({ initial, onSave, onClose }: Props) {
       ? Notification.permission
       : "unsupported"
   );
+  const [subscriptionToken, setSubscriptionToken] = useState<string | null>(null);
+  const [loadingToken, setLoadingToken] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("Notification" in window)) return;
     setPermission(Notification.permission);
+  }, []);
+
+  // Fetch subscription token
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        const res = await fetch("/api/user/notification-settings");
+        if (res.ok) {
+          const data = await res.json();
+          setSubscriptionToken(data.calendarSubscriptionToken || null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch subscription token:", err);
+      } finally {
+        setLoadingToken(false);
+      }
+    };
+    fetchToken();
   }, []);
 
   const canRequestPermission = permission === "default";
@@ -136,6 +158,40 @@ export function NotificationSettingsModal({ initial, onSave, onClose }: Props) {
     }
   };
 
+  const subscriptionUrl = subscriptionToken
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}`
+    : null;
+
+  const handleCopyUrl = async () => {
+    if (!subscriptionUrl) return;
+    try {
+      await navigator.clipboard.writeText(subscriptionUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setError("Failed to copy to clipboard");
+    }
+  };
+
+  const handleRegenerateToken = async () => {
+    if (!confirm("Regenerate subscription URL? Your old URL will stop working.")) {
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch("/api/user/regenerate-calendar-token", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to regenerate token");
+      }
+      const data = await res.json();
+      setSubscriptionToken(data.calendarSubscriptionToken);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to regenerate token");
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700">
@@ -186,6 +242,68 @@ export function NotificationSettingsModal({ initial, onSave, onClose }: Props) {
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
                 Notifications are blocked. Enable them in your browser site
                 settings.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+            <div>
+              <p className="text-xs font-medium text-gray-700 dark:text-gray-200">
+                Calendar Subscription (iOS/Android)
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Subscribe in Apple Calendar or Google Calendar for native notifications
+              </p>
+            </div>
+            
+            {loadingToken ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400">Loading...</p>
+            ) : subscriptionUrl ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={subscriptionUrl}
+                    className="flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-950 px-2.5 py-1.5 text-xs text-gray-900 dark:text-gray-100 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyUrl}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1.5"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                  <p className="font-medium text-gray-700 dark:text-gray-200">How to subscribe:</p>
+                  <p><strong>iOS:</strong> Settings → Calendar → Accounts → Add Account → Other → Subscribe to Calendar → Paste URL</p>
+                  <p><strong>Android/Google:</strong> Google Calendar → Settings → Add calendar → From URL → Paste URL</p>
+                  <p className="text-amber-600 dark:text-amber-400 mt-2">
+                    Updates hourly. Keep this URL private - anyone with it can view your calendar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRegenerateToken}
+                  className="mt-2 px-3 py-1.5 rounded-md text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Regenerate URL
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                No subscription URL available
               </p>
             )}
           </div>
