@@ -10,12 +10,12 @@ interface EventBlockProps {
   dayStart: Date;
   columnIndex: number;
   totalColumns: number;
-  onClick: (event: CalendarEvent, rect: DOMRect) => void;
   /** Override displayed position/size during drag preview */
   overrideStart?: Date;
   overrideEnd?: Date;
   /** Style as a preview (semi-transparent) during drag */
   isPreview?: boolean;
+  hasBackground?: boolean;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -36,10 +36,10 @@ export function EventBlock({
   dayStart,
   columnIndex,
   totalColumns,
-  onClick,
   overrideStart,
   overrideEnd,
   isPreview = false,
+  hasBackground = false,
 }: EventBlockProps) {
   const start = overrideStart ?? new Date(event.startTime);
   const end = overrideEnd ?? new Date(event.endTime);
@@ -62,7 +62,7 @@ export function EventBlock({
   const rgb = hexToRgb(event.color);
   const bgColor = rgb
     ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${isPreview ? 0.5 : 0.15})`
-    : `${event.color}${isPreview ? '80' : '25'}`;
+    : `${event.color}${isPreview ? "80" : "25"}`;
   const borderColor = event.color;
 
   const isShort = height < 40;
@@ -83,10 +83,6 @@ export function EventBlock({
         borderLeft: `3px solid ${borderColor}`,
         zIndex: 10,
       }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick(event, e.currentTarget.getBoundingClientRect());
-      }}
     >
       {/* Top resize handle - hit area for TimeGrid to detect */}
       {canResize && height > RESIZE_HANDLE_HEIGHT * 2 && (
@@ -98,13 +94,20 @@ export function EventBlock({
       )}
 
       <p
-        className="text-xs font-semibold leading-tight truncate"
-        style={{ color: event.color }}
+        className={`text-xs font-semibold leading-tight truncate ${
+          hasBackground ? "text-black dark:text-white" : ""
+        }`}
+        style={{ color: hasBackground ? undefined : event.color }}
       >
         {event.title}
       </p>
       {!isShort && (
-        <p className="text-xs leading-tight opacity-70 truncate" style={{ color: event.color }}>
+        <p
+          className={`text-xs leading-tight truncate ${
+            hasBackground ? "text-black/85 dark:text-white/85" : "opacity-70"
+          }`}
+          style={{ color: hasBackground ? undefined : event.color }}
+        >
           {format(start, "h:mm a")} – {format(end, "h:mm a")}
           {event.recurrenceRule && (
             <RotateCcw className="inline w-2.5 h-2.5 ml-0.5 opacity-60" />

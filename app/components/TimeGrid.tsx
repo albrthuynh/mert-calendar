@@ -593,9 +593,6 @@ export function TimeGrid({
                       dayStart={day}
                       columnIndex={column}
                       totalColumns={totalColumns}
-                      onClick={() => {
-                        /* Opens via grid pointer-up so click/drag don't fight */
-                      }}
                       overrideStart={
                         isResizing ? resizePreview!.startTime : undefined
                       }
@@ -603,6 +600,7 @@ export function TimeGrid({
                         isResizing ? resizePreview!.endTime : undefined
                       }
                       isPreview={isMoving || undefined}
+                      hasBackground={hasBackground}
                     />
                   </div>
                 );

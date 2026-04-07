@@ -589,30 +589,34 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
 
                       {/* Events */}
                       <div className="flex-1 px-1 pb-0.5 space-y-px mt-0.5 overflow-y-auto min-h-0">
-                        {dayEvents.map((event) => (
-                          <button
-                            key={event.id}
-                            type="button"
-                            data-event-trigger
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEventClick(
-                                event,
-                                e.currentTarget.getBoundingClientRect()
-                              );
-                            }}
-                            className="w-full text-left rounded px-1.5 py-px text-[11px] truncate leading-snug hover:brightness-90 transition-all"
-                            style={{
-                              backgroundColor: `${event.color}20`,
-                              color: event.color,
-                              borderLeft: `2px solid ${event.color}`,
-                            }}
-                          >
-                            {event.allDay
-                              ? event.title
-                              : `${format(new Date(event.startTime), "h:mm")} – ${format(new Date(event.endTime), "h:mm")} ${event.title}`}
-                          </button>
-                        ))}
+                        {dayEvents.map((event) => {
+                          return (
+                            <button
+                              key={event.id}
+                              type="button"
+                              data-event-trigger
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEventClick(
+                                  event,
+                                  e.currentTarget.getBoundingClientRect()
+                                );
+                              }}
+                              className={`w-full text-left rounded px-1.5 py-px text-[11px] truncate leading-snug hover:brightness-90 transition-all ${
+                                backgroundUrl ? "text-black dark:text-white" : ""
+                              }`}
+                              style={{
+                                backgroundColor: `${event.color}20`,
+                                color: backgroundUrl ? undefined : event.color,
+                                borderLeft: `2px solid ${event.color}`,
+                              }}
+                            >
+                              {event.allDay
+                                ? event.title
+                                : `${format(new Date(event.startTime), "h:mm")} – ${format(new Date(event.endTime), "h:mm")} ${event.title}`}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   );
