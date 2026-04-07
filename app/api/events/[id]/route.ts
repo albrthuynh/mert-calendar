@@ -186,6 +186,14 @@ export async function PUT(
     }
   }
 
+  // Series-wide edit must drop per-occurrence overrides; otherwise GET still prefers
+  // child rows and the updated master never shows for those instances.
+  if (editScope === "series" && existing.recurrenceRule) {
+    await prisma.event.deleteMany({
+      where: { parentEventId: existing.id },
+    });
+  }
+
   const updated = await prisma.event.update({
     where: { id },
     data: {
