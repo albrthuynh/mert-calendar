@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { format } from "date-fns";
 import { X } from "lucide-react";
 import { CalendarEvent } from "@/types/calendar";
@@ -31,6 +31,13 @@ export function EventFormModal({
   const canChooseRecurringEditScope = Boolean(
     isEditing && event?.isRecurringInstance && event?.recurrenceRule
   );
+  const startTimeInputId = useId();
+  const endTimeInputId = useId();
+  const recurrenceEndDateInputId = useId();
+  const editScopeName = useId();
+  const editScopeSingleId = useId();
+  const editScopeSeriesId = useId();
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const defaultStart = initialStartTime ?? initialDate ?? new Date();
   const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
@@ -52,7 +59,7 @@ export function EventFormModal({
       ? format(new Date(event.recurrenceEndDate), "yyyy-MM-dd")
       : ""
   );
-  const [editScope, setEditScope] = useState<"single" | "series">("single");
+  const [editScope, setEditScope] = useState<"single" | "series" | null>(null);
   const [reminderChoice, setReminderChoice] = useState<string>(() => {
     if (event?.reminderDisabled) return "none";
     if (event?.reminderMinutes === null || event?.reminderMinutes === undefined) return "default";
@@ -80,6 +87,10 @@ export function EventFormModal({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
+  useEffect(() => {
+    titleInputRef.current?.focus();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -88,6 +99,10 @@ export function EventFormModal({
     }
     if (new Date(startTime) >= new Date(endTime)) {
       setError("End time must be after start time.");
+      return;
+    }
+    if (canChooseRecurringEditScope && !editScope) {
+      setError("Please choose whether to edit this event or the entire series.");
       return;
     }
 
@@ -119,7 +134,7 @@ export function EventFormModal({
           : null,
         reminderMinutes,
         reminderDisabled,
-        ...(canChooseRecurringEditScope && {
+        ...(canChooseRecurringEditScope && editScope && {
           editScope,
           instanceStartTime: event?.instanceStartTime ?? event?.startTime,
         }),
@@ -172,16 +187,22 @@ export function EventFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/50"
+      onClick={onClose}
+      role="presentation"
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-100 dark:border-gray-700">
+      <div className="min-h-full flex w-full items-center justify-center p-4">
+        <div
+          className="relative z-10 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[min(90dvh,calc(100vh-2rem))] overflow-y-auto border border-gray-100 dark:border-gray-700"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             {isEditing ? "Edit event" : "New event"}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
           >
@@ -193,7 +214,7 @@ export function EventFormModal({
           {/* Title */}
           <div>
             <input
-              autoFocus
+              ref={titleInputRef}
               type="text"
               placeholder="Add title"
               value={title}
@@ -205,10 +226,14 @@ export function EventFormModal({
           {/* Start / End times */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 w-12">
+              <label
+                htmlFor={startTimeInputId}
+                className="text-xs font-medium text-gray-500 dark:text-gray-400 w-12"
+              >
                 Start
               </label>
               <input
+                id={startTimeInputId}
                 type="datetime-local"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -216,10 +241,14 @@ export function EventFormModal({
               />
             </div>
             <div className="flex items-center gap-3">
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 w-12">
+              <label
+                htmlFor={endTimeInputId}
+                className="text-xs font-medium text-gray-500 dark:text-gray-400 w-12"
+              >
                 End
               </label>
               <input
+                id={endTimeInputId}
                 type="datetime-local"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
@@ -252,10 +281,14 @@ export function EventFormModal({
             />
             {recurrenceRule && (
               <div className="mt-2 flex items-center gap-2">
-                <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                <label
+                  htmlFor={recurrenceEndDateInputId}
+                  className="text-xs text-gray-500 dark:text-gray-400 shrink-0"
+                >
                   End repeat on
                 </label>
                 <input
+                  id={recurrenceEndDateInputId}
                   type="date"
                   value={recurrenceEndDate}
                   onChange={(e) => setRecurrenceEndDate(e.target.value)}
@@ -267,20 +300,46 @@ export function EventFormModal({
 
           {/* Recurring edit scope */}
           {canChooseRecurringEditScope && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                Apply changes to
-              </p>
-              <select
-                value={editScope}
-                onChange={(e) =>
-                  setEditScope(e.target.value === "series" ? "series" : "single")
-                }
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="single">This event only</option>
-                <option value="series">All events in the series</option>
-              </select>
+            <div className="space-y-2">
+              <fieldset className="space-y-1.5">
+                <legend className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Apply changes to
+                </legend>
+                <label
+                  htmlFor={editScopeSingleId}
+                  className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/80 cursor-pointer"
+                >
+                  <input
+                    id={editScopeSingleId}
+                    type="radio"
+                    name={editScopeName}
+                    checked={editScope === "single"}
+                    onChange={() => {
+                      setEditScope("single");
+                      setError("");
+                    }}
+                    className="h-4 w-4 rounded-full border-2 border-gray-400 dark:border-gray-500 appearance-none checked:bg-blue-500 checked:border-blue-500"
+                  />
+                  <span>This event only</span>
+                </label>
+                <label
+                  htmlFor={editScopeSeriesId}
+                  className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/80 cursor-pointer"
+                >
+                  <input
+                    id={editScopeSeriesId}
+                    type="radio"
+                    name={editScopeName}
+                    checked={editScope === "series"}
+                    onChange={() => {
+                      setEditScope("series");
+                      setError("");
+                    }}
+                    className="h-4 w-4 rounded-full border-2 border-gray-400 dark:border-gray-500 appearance-none checked:bg-blue-500 checked:border-blue-500"
+                  />
+                  <span>All events in the series</span>
+                </label>
+              </fieldset>
             </div>
           )}
 
@@ -329,6 +388,7 @@ export function EventFormModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
