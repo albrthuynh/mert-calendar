@@ -7,6 +7,12 @@ function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
 }
 
+function toInclusiveDayEnd(date: Date): Date {
+  const end = new Date(date);
+  end.setUTCHours(23, 59, 59, 999);
+  return end;
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -88,6 +94,15 @@ export async function GET(req: NextRequest) {
     // Expand recurring event
     try {
       const durationMs = event.endTime.getTime() - event.startTime.getTime();
+      const recurrenceLimit = event.recurrenceEndDate
+        ? toInclusiveDayEnd(event.recurrenceEndDate)
+        : null;
+      const occurrenceEnd =
+        recurrenceLimit && recurrenceLimit < rangeEnd ? recurrenceLimit : rangeEnd;
+
+      if (occurrenceEnd < rangeStart) {
+        continue;
+      }
 
       const rruleStr = `DTSTART:${event.startTime
         .toISOString()
@@ -95,7 +110,7 @@ export async function GET(req: NextRequest) {
         .replace(/\.\d{3}/, "")}\nRRULE:${event.recurrenceRule}`;
 
       const rule = RRule.fromString(rruleStr);
-      const occurrences = rule.between(rangeStart, rangeEnd, true);
+      const occurrences = rule.between(rangeStart, occurrenceEnd, true);
 
       const overridesByInstanceId = new Map<string, (typeof event.childEvents)[number]>();
       for (const child of event.childEvents) {

@@ -34,6 +34,11 @@ export async function GET(
   const now = new Date();
   const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
   const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const toInclusiveDayEnd = (date: Date) => {
+    const end = new Date(date);
+    end.setUTCHours(23, 59, 59, 999);
+    return end;
+  };
 
   const [standaloneEvents, seriesEvents] = await Promise.all([
     prisma.event.findMany({
@@ -118,8 +123,18 @@ export async function GET(
         }
       }
 
-      // Generate occurrences for the 1-year window
-      const occurrences = rule.between(oneMonthAgo, oneYearFromNow, true);
+      // Generate occurrences for the 1-year window (respecting recurrenceEndDate)
+      const recurrenceLimit = event.recurrenceEndDate
+        ? toInclusiveDayEnd(event.recurrenceEndDate)
+        : null;
+      const occurrenceEnd =
+        recurrenceLimit && recurrenceLimit < oneYearFromNow
+          ? recurrenceLimit
+          : oneYearFromNow;
+      const occurrences =
+        occurrenceEnd < oneMonthAgo
+          ? []
+          : rule.between(oneMonthAgo, occurrenceEnd, true);
       const durationMs = event.endTime.getTime() - event.startTime.getTime();
 
       for (const occ of occurrences) {
