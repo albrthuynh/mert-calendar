@@ -11,18 +11,27 @@ import {
   isSameDay,
   isToday,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, ListTodo, Calendar as CalendarIcon, Clock } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalendarIcon,
+  CalendarDays,
+  Clock,
+} from "lucide-react";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { EventSidebar } from "./EventSidebar";
 import { TodoItem } from "./TodoItem";
 import { TodoFormModal } from "./TodoFormModal";
-import { CalendarEvent, Todo } from "@/types/calendar";
+import {
+  ImportantDayEditorPopover,
+  type ImportantDaySavePayload,
+} from "./ImportantDayEditorPopover";
+import { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
-import { useLiveNow } from "../hooks/useLiveNow";
 
 type MobileTab = "todos" | "events";
 
@@ -30,13 +39,15 @@ interface MobileDayViewProps {
   backgroundUrl?: string;
 }
 
+type DateInputWithPicker = HTMLInputElement & { showPicker?: () => void };
+
 export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [currentDay, setCurrentDay] = useState<Date>(() => startOfDay(new Date()));
-  const currentTime = useLiveNow();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<MobileTab>("todos");
+  const [activeTab, setActiveTab] = useState<MobileTab>("events");
 
   // Modal / popover / sidebar state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -46,8 +57,13 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [showEventSidebar, setShowEventSidebar] = useState(false);
 
   const [showTodoModal, setShowTodoModal] = useState(false);
+  const [importantDayEditor, setImportantDayEditor] = useState<{
+    day: Date;
+    anchorRect: DOMRect;
+  } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const datePickerRef = useRef<HTMLInputElement>(null);
   const notifPrefs = useNotificationPreferences();
 
   useEventReminderScheduler({ events, prefs: notifPrefs });
@@ -81,6 +97,26 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     fetchAll();
   }, [currentDay]);
 
+  useEffect(() => {
+    const startKey = format(weekStart, "yyyy-MM-dd");
+    const endKey = format(addDays(weekStart, 6), "yyyy-MM-dd");
+
+    const fetchImportantDays = async () => {
+      try {
+        const res = await fetch(
+          `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
+        );
+        if (res.ok) {
+          setImportantDays(await res.json());
+        }
+      } catch {
+        // empty
+      }
+    };
+
+    fetchImportantDays();
+  }, [weekStart]);
+
   const goToPrevWeek = useCallback(
     () => setCurrentDay((d) => startOfDay(subDays(d, 7))),
     []
@@ -99,6 +135,31 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const selectDay = useCallback((day: Date) => {
     setCurrentDay(startOfDay(day));
   }, []);
+
+  const openDatePicker = useCallback(() => {
+    const picker = datePickerRef.current as DateInputWithPicker | null;
+    if (!picker) return;
+
+    if (typeof picker.showPicker === "function") {
+      picker.showPicker();
+      return;
+    }
+
+    picker.click();
+  }, []);
+
+  const handleDatePicked = useCallback(
+    (value: string) => {
+      const [yearText, monthText, dayText] = value.split("-");
+      const year = Number(yearText);
+      const month = Number(monthText);
+      const day = Number(dayText);
+      if (!year || !month || !day) return;
+
+      setCurrentDay(startOfDay(new Date(year, month - 1, day)));
+    },
+    []
+  );
 
   // ── Event handlers ──────────────────────────────────────────
 
@@ -133,7 +194,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   );
 
   const handleEventSaved = useCallback(
-    async (_saved: CalendarEvent) => {
+    async () => {
       await refreshEvents();
       setShowEventModal(false);
       setShowEventSidebar(false);
@@ -261,6 +322,38 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   }, []);
 
+  const handleImportantDaySave = useCallback(
+    async (payload: ImportantDaySavePayload) => {
+      if (payload.remove) {
+        const existing = importantDays.find((d) => d.date === payload.dateKey);
+        if (!existing) return;
+        const res = await fetch(`/api/important-days/${existing.id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          setImportantDays((prev) => prev.filter((d) => d.id !== existing.id));
+        }
+        return;
+      }
+      const res = await fetch("/api/important-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: payload.dateKey,
+          label: payload.label,
+        }),
+      });
+      if (res.ok) {
+        const row: ImportantDay = await res.json();
+        setImportantDays((prev) => {
+          const rest = prev.filter((d) => d.date !== payload.dateKey);
+          return [...rest, row].sort((a, b) => a.date.localeCompare(b.date));
+        });
+      }
+    },
+    [importantDays]
+  );
+
   const dayTodos = todos.filter((t) =>
     isSameDay(new Date(t.taskDate), currentDay)
   );
@@ -269,6 +362,9 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const dayEvents = events.filter((e) =>
     isSameDay(new Date(e.startTime), currentDay)
   ).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const selectedDayKey = format(currentDay, "yyyy-MM-dd");
+  const selectedImportantLabel =
+    importantDays.find((day) => day.date === selectedDayKey)?.label.trim() ?? "";
 
   const containerStyle = backgroundUrl
     ? {
@@ -303,6 +399,9 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           {weekDays.map((day) => {
             const isSelected = isSameDay(day, currentDay);
             const isDayToday = isToday(day);
+            const dateKey = format(day, "yyyy-MM-dd");
+            const importantLabel =
+              importantDays.find((importantDay) => importantDay.date === dateKey)?.label.trim() ?? "";
             return (
               <button
                 key={day.toISOString()}
@@ -324,6 +423,16 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
                 }`}>
                   {format(day, "d")}
                 </span>
+                <span
+                  className={`mt-1 h-1.5 w-1.5 rounded-full ${
+                    importantLabel
+                      ? isSelected
+                        ? "bg-white"
+                        : "bg-blue-500 dark:bg-blue-400"
+                      : "opacity-0"
+                  }`}
+                  aria-hidden
+                />
               </button>
             );
           })}
@@ -347,8 +456,45 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           <span className="text-xs text-gray-500 dark:text-gray-400">
             {format(currentDay, "MMMM d, yyyy")}
           </span>
+          {selectedImportantLabel ? (
+            <button
+              type="button"
+              onClick={(e) =>
+                setImportantDayEditor({
+                  day: currentDay,
+                  anchorRect: e.currentTarget.getBoundingClientRect(),
+                })
+              }
+              className="mt-1 inline-flex max-w-[17rem] items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+              title="Edit important day"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500 dark:bg-blue-300" />
+              <span className="truncate">Important: {selectedImportantLabel}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) =>
+                setImportantDayEditor({
+                  day: currentDay,
+                  anchorRect: e.currentTarget.getBoundingClientRect(),
+                })
+              }
+              className="mt-1 inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/30"
+            >
+              Mark important
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openDatePicker}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Pick
+          </button>
           <button
             type="button"
             onClick={goToToday}
@@ -361,6 +507,14 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           )}
         </div>
       </div>
+      <input
+        ref={datePickerRef}
+        type="date"
+        value={format(currentDay, "yyyy-MM-dd")}
+        onChange={(e) => handleDatePicked(e.target.value)}
+        className="sr-only"
+        aria-label="Pick date"
+      />
 
       {/* Tabs */}
       <div
@@ -606,6 +760,19 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             handleTodoAdd(saved);
             setShowTodoModal(false);
           }}
+        />
+      )}
+
+      {importantDayEditor && (
+        <ImportantDayEditorPopover
+          key={format(importantDayEditor.day, "yyyy-MM-dd")}
+          day={importantDayEditor.day}
+          anchorRect={importantDayEditor.anchorRect}
+          existing={importantDays.find(
+            (d) => d.date === format(importantDayEditor.day, "yyyy-MM-dd")
+          )}
+          onClose={() => setImportantDayEditor(null)}
+          onSave={handleImportantDaySave}
         />
       )}
     </div>
