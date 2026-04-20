@@ -5,9 +5,8 @@ import { normalizeSoundId, playNotificationSound } from "@/lib/notificationSound
 export async function notifyUpcomingEvent(opts: {
   event: CalendarEvent;
   prefs: NotificationPreferences;
-  pushToast: (t: { id?: string; title: string; message?: string }) => void;
 }) {
-  const { event, prefs, pushToast } = opts;
+  const { event, prefs } = opts;
 
   const title = event.title?.trim() ? event.title.trim() : "Upcoming event";
   const start = new Date(event.startTime);
@@ -17,7 +16,6 @@ export async function notifyUpcomingEvent(opts: {
 
   const toastMessage = timeLabel ? `Starts at ${timeLabel}` : undefined;
 
-  let showedBrowser = false;
   if (typeof window !== "undefined") {
     if ("Notification" in window && Notification.permission === "granted") {
       try {
@@ -28,9 +26,8 @@ export async function notifyUpcomingEvent(opts: {
           requireInteraction: false,
         });
         window.setTimeout(() => notification.close(), 12_000);
-        showedBrowser = true;
       } catch {
-        // fall back to toast/alert
+        // ignore notification errors
       }
     }
 
@@ -42,11 +39,4 @@ export async function notifyUpcomingEvent(opts: {
     }
 
   }
-
-  // Always show a lightweight in-app signal so it feels reliable.
-  pushToast({
-    id: `reminder-${event.originalId}-${event.startTime}`,
-    title: showedBrowser ? `Reminder: ${title}` : `Event reminder: ${title}`,
-    message: toastMessage,
-  });
 }

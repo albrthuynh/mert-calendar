@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import type { Todo } from "@/types/calendar";
 import type { NotificationPreferences } from "@/app/context/NotificationPreferencesContext";
 import { notifyUpcomingTodo } from "@/lib/notifyUpcomingTodo";
-import { useToast } from "@/app/components/ToastProvider";
 
 type Scheduled = {
   key: string;
@@ -54,7 +53,6 @@ export function useTodoReminderScheduler(params: {
   todos: Todo[];
   prefs: NotificationPreferences;
 }) {
-  const { pushToast } = useToast();
   const settledRef = useRef<Set<string>>(new Set());
   const scheduledRef = useRef<Map<string, Scheduled>>(new Map());
 
@@ -83,16 +81,6 @@ export function useTodoReminderScheduler(params: {
       const latenessMs = Date.now() - candidate.fireAtMs;
       if (latenessMs > LATE_FIRE_WINDOW_MS) {
         settledRef.current.add(candidate.key);
-        const due = candidate.todo.dueDate ? new Date(candidate.todo.dueDate) : null;
-        const dueLabel =
-          due && Number.isFinite(due.getTime())
-            ? due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-            : "the scheduled time";
-        pushToast({
-          id: `missed-todo-reminder-${candidate.key}`,
-          title: `Missed reminder: ${candidate.todo.title || "Upcoming task"}`,
-          message: `Originally scheduled for ${dueLabel}`,
-        });
         return;
       }
 
@@ -100,7 +88,6 @@ export function useTodoReminderScheduler(params: {
       await notifyUpcomingTodo({
         todo: candidate.todo,
         prefs: params.prefs,
-        pushToast,
       });
     };
 
@@ -175,7 +162,7 @@ export function useTodoReminderScheduler(params: {
       window.removeEventListener("focus", reconcile);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [params.todos, params.prefs, pushToast]);
+  }, [params.todos, params.prefs]);
 
   useEffect(() => {
     return () => {

@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import type { CalendarEvent } from "@/types/calendar";
 import type { NotificationPreferences } from "@/app/context/NotificationPreferencesContext";
 import { notifyUpcomingEvent } from "@/lib/notifyUpcomingEvent";
-import { useToast } from "@/app/components/ToastProvider";
 
 type Scheduled = {
   key: string;
@@ -54,7 +53,6 @@ export function useEventReminderScheduler(params: {
   events: CalendarEvent[];
   prefs: NotificationPreferences;
 }) {
-  const { pushToast } = useToast();
   const settledRef = useRef<Set<string>>(new Set());
   const scheduledRef = useRef<Map<string, Scheduled>>(new Map());
 
@@ -82,15 +80,6 @@ export function useEventReminderScheduler(params: {
       const latenessMs = Date.now() - candidate.fireAtMs;
       if (latenessMs > LATE_FIRE_WINDOW_MS) {
         settledRef.current.add(candidate.key);
-        const start = new Date(candidate.event.startTime);
-        const timeLabel = Number.isFinite(start.getTime())
-          ? start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-          : "the scheduled time";
-        pushToast({
-          id: `missed-reminder-${candidate.key}`,
-          title: `Missed reminder: ${candidate.event.title || "Upcoming event"}`,
-          message: `Originally scheduled for ${timeLabel}`,
-        });
         return;
       }
 
@@ -98,7 +87,6 @@ export function useEventReminderScheduler(params: {
       await notifyUpcomingEvent({
         event: candidate.event,
         prefs: params.prefs,
-        pushToast,
       });
     };
 
@@ -173,7 +161,7 @@ export function useEventReminderScheduler(params: {
       window.removeEventListener("focus", reconcile);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [params.events, params.prefs, pushToast]);
+  }, [params.events, params.prefs]);
 
   useEffect(() => {
     return () => {

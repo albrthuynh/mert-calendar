@@ -5,9 +5,8 @@ import { normalizeSoundId, playNotificationSound } from "@/lib/notificationSound
 export async function notifyUpcomingTodo(opts: {
   todo: Todo;
   prefs: NotificationPreferences;
-  pushToast: (t: { id?: string; title: string; message?: string }) => void;
 }) {
-  const { todo, prefs, pushToast } = opts;
+  const { todo, prefs } = opts;
 
   const title = todo.title?.trim() ? todo.title.trim() : "Upcoming task";
 
@@ -23,7 +22,6 @@ export async function notifyUpcomingTodo(opts: {
     ? `Due at ${timeLabel}`
     : "Task due soon.";
 
-  let showedBrowser = false;
   if (typeof window !== "undefined") {
     if ("Notification" in window && Notification.permission === "granted") {
       try {
@@ -34,9 +32,8 @@ export async function notifyUpcomingTodo(opts: {
           requireInteraction: false,
         });
         window.setTimeout(() => notification.close(), 12_000);
-        showedBrowser = true;
       } catch {
-        // fall back to toast/alert
+        // ignore notification errors
       }
     }
 
@@ -48,11 +45,4 @@ export async function notifyUpcomingTodo(opts: {
     }
 
   }
-
-  // Always show a lightweight in-app signal so it feels reliable.
-  pushToast({
-    id: `todo-reminder-${todo.id}-${todo.dueDate ?? todo.taskDate}`,
-    title: showedBrowser ? `Todo: ${title}` : `Todo reminder: ${title}`,
-    message: toastMessage,
-  });
 }
