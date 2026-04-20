@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { bumpUserDataVersion } from "@/lib/inMemoryCache";
 
 export async function PUT(
   req: NextRequest,
@@ -36,6 +37,7 @@ export async function PUT(
       ...(order !== undefined && { order }),
     },
   });
+  bumpUserDataVersion("todos", session.user.id);
 
   return NextResponse.json(updated);
 }
@@ -59,5 +61,6 @@ export async function DELETE(
   }
 
   await prisma.todo.delete({ where: { id } });
+  bumpUserDataVersion("todos", session.user.id);
   return NextResponse.json({ success: true });
 }

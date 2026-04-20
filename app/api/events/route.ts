@@ -1,7 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  bumpUserDataVersion,
+  getOrSetInMemoryCache,
+  getUserDataVersion,
+} from "@/lib/inMemoryCache";
 import { RRule } from "rrule";
+
+const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
+
+type EventResponseItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  startTime: string;
+  endTime: string;
+  color: string;
+  allDay: boolean;
+  recurrenceRule: string | null;
+  recurrenceEndDate: string | null;
+  reminderMinutes: number | null;
+  reminderDisabled: boolean;
+  isRecurringInstance: boolean;
+  originalId: string;
+  instanceStartTime: string | null;
+};
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
@@ -13,42 +37,27 @@ function toInclusiveDayEnd(date: Date): Date {
   return end;
 }
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { searchParams } = req.nextUrl;
-  const start = searchParams.get("start");
-  const end = searchParams.get("end");
-
-  if (!start || !end) {
-    return NextResponse.json(
-      { error: "start and end query params required" },
-      { status: 400 }
-    );
-  }
-
-  const rangeStart = new Date(start);
-  const rangeEnd = new Date(end);
-
+async function loadEventsForRange(
+  userId: string,
+  rangeStart: Date,
+  rangeEnd: Date
+): Promise<EventResponseItem[]> {
   // Fetch base events:
   // - standalone non-recurring events that overlap the range (excluding per-instance overrides)
   // - recurring series events + their per-instance override children
   const [standaloneEvents, seriesEvents] = await Promise.all([
-    (prisma.event as any).findMany({
+    prisma.event.findMany({
       where: {
-        userId: session.user.id,
+        userId,
         parentEventId: null,
         recurrenceRule: null,
         startTime: { lte: rangeEnd },
         endTime: { gte: rangeStart },
       },
     }),
-    (prisma.event as any).findMany({
+    prisma.event.findMany({
       where: {
-        userId: session.user.id,
+        userId,
         parentEventId: null,
         NOT: { recurrenceRule: null },
         startTime: { lte: rangeEnd },
@@ -59,22 +68,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   // Expand recurring events into occurrences within range
-  const result: Array<{
-    id: string;
-    title: string;
-    description: string | null;
-    startTime: string;
-    endTime: string;
-    color: string;
-    allDay: boolean;
-    recurrenceRule: string | null;
-    recurrenceEndDate: string | null;
-    reminderMinutes: number | null;
-    reminderDisabled: boolean;
-    isRecurringInstance: boolean;
-    originalId: string;
-    instanceStartTime: string | null;
-  }> = [];
+  const result: EventResponseItem[] = [];
 
   for (const event of standaloneEvents) {
     result.push({
@@ -175,6 +169,50 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  return result;
+}
+
+export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = req.nextUrl;
+  const start = searchParams.get("start");
+  const end = searchParams.get("end");
+
+  if (!start || !end) {
+    return NextResponse.json(
+      { error: "start and end query params required" },
+      { status: 400 }
+    );
+  }
+
+  const rangeStart = new Date(start);
+  const rangeEnd = new Date(end);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    return NextResponse.json(
+      { error: "start and end must be valid ISO timestamps" },
+      { status: 400 }
+    );
+  }
+
+  const version = getUserDataVersion("events", session.user.id);
+  const cacheKey = [
+    "events",
+    session.user.id,
+    `v${version}`,
+    rangeStart.toISOString(),
+    rangeEnd.toISOString(),
+  ].join(":");
+
+  const result = await getOrSetInMemoryCache<EventResponseItem[]>(
+    cacheKey,
+    EVENTS_CACHE_TTL_MS,
+    () => loadEventsForRange(session.user.id, rangeStart, rangeEnd)
+  );
+
   return NextResponse.json(result);
 }
 
@@ -250,6 +288,7 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
     },
   });
+  bumpUserDataVersion("events", session.user.id);
 
   return NextResponse.json(event, { status: 201 });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { bumpUserDataVersion } from "@/lib/inMemoryCache";
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
@@ -152,6 +153,7 @@ export async function PUT(
           cleanReminderDisabled === undefined ? (existing.reminderDisabled ?? false) : cleanReminderDisabled,
       },
     });
+    bumpUserDataVersion("events", session.user.id);
 
     return NextResponse.json(override);
   }
@@ -217,6 +219,7 @@ export async function PUT(
       ...(cleanReminderDisabled !== undefined && { reminderDisabled: cleanReminderDisabled }),
     },
   });
+  bumpUserDataVersion("events", session.user.id);
 
   return NextResponse.json(updated);
 }
@@ -240,5 +243,6 @@ export async function DELETE(
   }
 
   await prisma.event.delete({ where: { id } });
+  bumpUserDataVersion("events", session.user.id);
   return NextResponse.json({ success: true });
 }

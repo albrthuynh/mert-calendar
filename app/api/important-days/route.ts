@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  bumpUserDataVersion,
+  getOrSetInMemoryCache,
+  getUserDataVersion,
+} from "@/lib/inMemoryCache";
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const IMPORTANT_DAYS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -21,13 +27,24 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const rows = await prisma.importantDay.findMany({
-    where: {
-      userId: session.user.id,
-      date: { gte: startKey, lte: endKey },
-    },
-    orderBy: { date: "asc" },
-  });
+  const version = getUserDataVersion("importantDays", session.user.id);
+  const cacheKey = [
+    "importantDays",
+    session.user.id,
+    `v${version}`,
+    startKey,
+    endKey,
+  ].join(":");
+
+  const rows = await getOrSetInMemoryCache(cacheKey, IMPORTANT_DAYS_CACHE_TTL_MS, () =>
+    prisma.importantDay.findMany({
+      where: {
+        userId: session.user.id,
+        date: { gte: startKey, lte: endKey },
+      },
+      orderBy: { date: "asc" },
+    })
+  );
 
   return NextResponse.json(rows);
 }
@@ -69,6 +86,7 @@ export async function POST(req: NextRequest) {
     },
     update: { label },
   });
+  bumpUserDataVersion("importantDays", session.user.id);
 
   return NextResponse.json(row, { status: 201 });
 }

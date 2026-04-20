@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { bumpUserDataVersion } from "@/lib/inMemoryCache";
 
 export async function DELETE(
   _req: NextRequest,
@@ -22,6 +23,7 @@ export async function DELETE(
   }
 
   await prisma.importantDay.delete({ where: { id } });
+  bumpUserDataVersion("importantDays", session.user.id);
 
   return new NextResponse(null, { status: 204 });
 }

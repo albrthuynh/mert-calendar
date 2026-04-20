@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  bumpUserDataVersion,
+  getOrSetInMemoryCache,
+  getUserDataVersion,
+} from "@/lib/inMemoryCache";
 import { addDays } from "date-fns";
+
+const TODOS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -20,16 +27,36 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const todos = await prisma.todo.findMany({
-    where: {
-      userId: session.user.id,
-      taskDate: {
-        gte: new Date(start),
-        lte: new Date(end),
+  const rangeStart = new Date(start);
+  const rangeEnd = new Date(end);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    return NextResponse.json(
+      { error: "start and end must be valid ISO timestamps" },
+      { status: 400 }
+    );
+  }
+
+  const version = getUserDataVersion("todos", session.user.id);
+  const cacheKey = [
+    "todos",
+    session.user.id,
+    `v${version}`,
+    rangeStart.toISOString(),
+    rangeEnd.toISOString(),
+  ].join(":");
+
+  const todos = await getOrSetInMemoryCache(cacheKey, TODOS_CACHE_TTL_MS, () =>
+    prisma.todo.findMany({
+      where: {
+        userId: session.user.id,
+        taskDate: {
+          gte: rangeStart,
+          lte: rangeEnd,
+        },
       },
-    },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-  });
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    })
+  );
 
   return NextResponse.json(todos);
 }
@@ -81,6 +108,7 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
     },
   });
+  bumpUserDataVersion("todos", session.user.id);
 
   return NextResponse.json(todo, { status: 201 });
 }
