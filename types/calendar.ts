@@ -2,6 +2,7 @@ export interface CalendarEvent {
   id: string;
   title: string;
   description: string | null;
+  link: string | null;
   startTime: string; // ISO string
   endTime: string; // ISO string
   color: string;

@@ -86,6 +86,7 @@ export async function GET(
       end: event.endTime,
       summary: event.title,
       description: event.description || undefined,
+      url: event.link || undefined,
       allDay: event.allDay,
     });
 
@@ -150,6 +151,7 @@ export async function GET(
             end: override.endTime,
             summary: override.title,
             description: override.description || undefined,
+            url: override.link || undefined,
             allDay: override.allDay,
           });
 
@@ -171,6 +173,7 @@ export async function GET(
             end: new Date(occ.getTime() + durationMs),
             summary: event.title,
             description: event.description || undefined,
+            url: event.link || undefined,
             allDay: event.allDay,
           });
 
@@ -195,6 +198,7 @@ export async function GET(
         end: event.endTime,
         summary: event.title,
         description: event.description || undefined,
+        url: event.link || undefined,
         allDay: event.allDay,
       });
 

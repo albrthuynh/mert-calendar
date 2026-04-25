@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { X, Trash2 } from "lucide-react";
+import { Link, X, Trash2 } from "lucide-react";
 import { CalendarEvent } from "@/types/calendar";
 import { ColorPicker } from "./ColorPicker";
 import { RecurrenceSelector } from "./RecurrenceSelector";
@@ -36,6 +36,7 @@ export function EventSidebar({
 
   const [title, setTitle] = useState(event?.title ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
+  const [link, setLink] = useState(event?.link ?? "");
   const [startTime, setStartTime] = useState(
     toLocalDatetimeValue(event ? new Date(event.startTime) : defaultStart)
   );
@@ -116,6 +117,7 @@ export function EventSidebar({
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
+        link: link.trim() || null,
         startTime: new Date(startTime).toISOString(),
         endTime: new Date(endTime).toISOString(),
         color,
@@ -161,6 +163,7 @@ export function EventSidebar({
         ...saved,
         startTime: (saved.startTime ?? payload.startTime) as string,
         endTime: (saved.endTime ?? payload.endTime) as string,
+        link: (saved.link ?? payload.link) as string | null,
         recurrenceEndDate: (saved.recurrenceEndDate ?? payload.recurrenceEndDate) as string | null,
         reminderMinutes: (saved.reminderMinutes ?? payload.reminderMinutes) as number | null,
         reminderDisabled: (saved.reminderDisabled ?? payload.reminderDisabled) as boolean,
@@ -283,6 +286,19 @@ export function EventSidebar({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            {/* Link */}
+            <div className="relative">
+              <Link className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+              <input
+                type="text"
+                inputMode="url"
+                placeholder="Meeting link (optional)"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-9 pr-3 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 

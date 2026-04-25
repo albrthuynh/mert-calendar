@@ -197,6 +197,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         originalId: tempId,
         title: "New event",
         description: null,
+        link: null,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
         color: "#4285F4",

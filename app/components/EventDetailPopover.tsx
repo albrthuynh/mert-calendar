@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { X, Pencil, Trash2, RotateCcw } from "lucide-react";
+import { ExternalLink, X, Pencil, Trash2, RotateCcw } from "lucide-react";
 import { CalendarEvent, RECURRENCE_OPTIONS } from "@/types/calendar";
 
 interface EventDetailPopoverProps {
@@ -183,6 +183,18 @@ export function EventDetailPopover({
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 leading-relaxed border-t border-gray-100 dark:border-gray-700/50 pt-2">
             {event.description}
           </p>
+        )}
+
+        {event.link && (
+          <a
+            href={event.link}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+          >
+            <ExternalLink className="h-4 w-4 shrink-0" />
+            <span className="truncate">Open link</span>
+          </a>
         )}
       </div>
     </div>

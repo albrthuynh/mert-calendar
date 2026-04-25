@@ -6,6 +6,7 @@ import {
   getOrSetInMemoryCache,
   getUserDataVersion,
 } from "@/lib/inMemoryCache";
+import { normalizeEventLink } from "@/lib/eventLink";
 import { RRule } from "rrule";
 
 const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -14,6 +15,7 @@ type EventResponseItem = {
   id: string;
   title: string;
   description: string | null;
+  link: string | null;
   startTime: string;
   endTime: string;
   color: string;
@@ -121,6 +123,7 @@ async function loadEventsForRange(
             id: override.id,
             title: override.title,
             description: override.description,
+            link: override.link,
             startTime: override.startTime.toISOString(),
             endTime: override.endTime.toISOString(),
             color: override.color,
@@ -140,6 +143,7 @@ async function loadEventsForRange(
           id: event.id,
           title: event.title,
           description: event.description,
+          link: event.link,
           startTime: occStartIso,
           endTime: new Date(occ.getTime() + durationMs).toISOString(),
           color: event.color,
@@ -237,6 +241,7 @@ export async function POST(req: NextRequest) {
   const {
     title,
     description,
+    link,
     startTime,
     endTime,
     color,
@@ -271,10 +276,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  let cleanLink: string | null;
+  try {
+    cleanLink = normalizeEventLink(link) ?? null;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "link must be a valid URL" },
+      { status: 400 }
+    );
+  }
+
   const event = await prisma.event.create({
     data: {
       title: title.trim(),
       description: description?.trim() || null,
+      link: cleanLink,
       startTime: new Date(startTime),
       endTime: new Date(endTime),
       color: color ?? "#4285F4",

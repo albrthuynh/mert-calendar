@@ -80,6 +80,7 @@ model Event {
   instanceId        String?   @unique
   title             String
   description       String?
+  link              String?
   startTime         DateTime
   endTime           DateTime
   color             String    @default("#4285F4")

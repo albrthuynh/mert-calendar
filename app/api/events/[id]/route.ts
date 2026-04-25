@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { bumpUserDataVersion } from "@/lib/inMemoryCache";
+import { normalizeEventLink } from "@/lib/eventLink";
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
@@ -42,6 +43,7 @@ export async function PUT(
   const {
     title,
     description,
+    link,
     startTime,
     endTime,
     color,
@@ -115,6 +117,16 @@ export async function PUT(
       }
     }
 
+    let cleanLink: string | null | undefined;
+    try {
+      cleanLink = normalizeEventLink(link);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "link must be a valid URL" },
+        { status: 400 }
+      );
+    }
+
     const override = await prisma.event.upsert({
       where: { instanceId },
       update: {
@@ -122,6 +134,7 @@ export async function PUT(
         ...(description !== undefined && {
           description: description?.trim() || null,
         }),
+        ...(cleanLink !== undefined && { link: cleanLink }),
         ...(startTime !== undefined && { startTime: new Date(startTime) }),
         ...(endTime !== undefined && { endTime: new Date(endTime) }),
         ...(color !== undefined && { color }),
@@ -139,6 +152,7 @@ export async function PUT(
         title: typeof title === "string" ? title.trim() : existing.title,
         description:
           description === undefined ? existing.description : description?.trim() || null,
+        link: cleanLink === undefined ? existing.link : cleanLink,
         startTime: startTime ? new Date(startTime) : new Date(instanceStartIso),
         endTime: endTime
           ? new Date(endTime)
@@ -188,6 +202,16 @@ export async function PUT(
     }
   }
 
+  let cleanLink: string | null | undefined;
+  try {
+    cleanLink = normalizeEventLink(link);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "link must be a valid URL" },
+      { status: 400 }
+    );
+  }
+
   // Series-wide edit must drop per-occurrence overrides; otherwise GET still prefers
   // child rows and the updated master never shows for those instances.
   if (editScope === "series" && existing.recurrenceRule) {
@@ -203,6 +227,7 @@ export async function PUT(
       ...(description !== undefined && {
         description: description?.trim() || null,
       }),
+      ...(cleanLink !== undefined && { link: cleanLink }),
       ...(startTime !== undefined && { startTime: new Date(startTime) }),
       ...(endTime !== undefined && { endTime: new Date(endTime) }),
       ...(color !== undefined && { color }),
