@@ -39,7 +39,18 @@ interface MobileDayViewProps {
   backgroundUrl?: string;
 }
 
-type DateInputWithPicker = HTMLInputElement & { showPicker?: () => void };
+function defaultEventStartForDay(day: Date): Date {
+  const now = new Date();
+  const start = startOfDay(day);
+  const roundedMinutes =
+    now.getMinutes() === 0 ? 0 : now.getMinutes() <= 30 ? 30 : 60;
+
+  start.setHours(now.getHours(), roundedMinutes, 0, 0);
+  if (!isSameDay(start, day)) {
+    start.setHours(23, 0, 0, 0);
+  }
+  return start;
+}
 
 export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [currentDay, setCurrentDay] = useState<Date>(() => startOfDay(new Date()));
@@ -63,7 +74,6 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const datePickerRef = useRef<HTMLInputElement>(null);
   const notifPrefs = useNotificationPreferences();
 
   useEventReminderScheduler({ events, prefs: notifPrefs });
@@ -136,18 +146,6 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     setCurrentDay(startOfDay(day));
   }, []);
 
-  const openDatePicker = useCallback(() => {
-    const picker = datePickerRef.current as DateInputWithPicker | null;
-    if (!picker) return;
-
-    if (typeof picker.showPicker === "function") {
-      picker.showPicker();
-      return;
-    }
-
-    picker.click();
-  }, []);
-
   const handleDatePicked = useCallback(
     (value: string) => {
       const [yearText, monthText, dayText] = value.split("-");
@@ -160,6 +158,15 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     },
     []
   );
+
+  const handleAddEvent = useCallback(() => {
+    setCreateDate(defaultEventStartForDay(currentDay));
+    setEditingEvent(undefined);
+    setPopoverEvent(null);
+    setShowEventSidebar(false);
+    setActiveTab("events");
+    setShowEventModal(true);
+  }, [currentDay]);
 
   // ── Event handlers ──────────────────────────────────────────
 
@@ -487,14 +494,17 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openDatePicker}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
-          >
+          <div className="relative inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300">
             <CalendarDays className="h-3.5 w-3.5" />
-            Pick
-          </button>
+            <span>Pick</span>
+            <input
+              type="date"
+              value={format(currentDay, "yyyy-MM-dd")}
+              onChange={(e) => handleDatePicked(e.target.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label="Pick date"
+            />
+          </div>
           <button
             type="button"
             onClick={goToToday}
@@ -507,14 +517,6 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           )}
         </div>
       </div>
-      <input
-        ref={datePickerRef}
-        type="date"
-        value={format(currentDay, "yyyy-MM-dd")}
-        onChange={(e) => handleDatePicked(e.target.value)}
-        className="sr-only"
-        aria-label="Pick date"
-      />
 
       {/* Tabs */}
       <div
@@ -629,7 +631,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
               </div>
               <button
                 type="button"
-                onClick={() => setShowEventModal(true)}
+                onClick={handleAddEvent}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 dark:border-blue-800 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
               >
                 + Add
