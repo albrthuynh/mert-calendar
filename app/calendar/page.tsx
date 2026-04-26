@@ -13,7 +13,7 @@ export default async function CalendarPage() {
     <CalendarPreferencesProvider>
       <NotificationPreferencesProvider>
         <div className="flex flex-col h-screen min-w-0 overflow-hidden bg-white dark:bg-gray-900">
-          <Navbar />
+          <Navbar session={session} />
           <CalendarView />
         </div>
       </NotificationPreferencesProvider>

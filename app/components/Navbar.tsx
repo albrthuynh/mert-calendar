@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, signOut } from "next-auth/react";
+import type { Session } from "next-auth";
+import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
 import Image from "next/image";
 import { DarkModeToggle } from "./DarkModeToggle";
@@ -126,8 +127,7 @@ function UserMenu({
 
 const DEFAULT_LOGO = "/tbh-creature-autism-creature.gif";
 
-export function Navbar() {
-  const { data: session } = useSession();
+export function Navbar({ session }: { session: Session | null }) {
   const { topLeftUrl } = useCalendarPreferences();
 
   return (
