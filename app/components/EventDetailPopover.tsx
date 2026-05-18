@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
-import { ExternalLink, X, Pencil, Trash2, RotateCcw } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Loader2,
+  X,
+  Pencil,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
 import { CalendarEvent, RECURRENCE_OPTIONS } from "@/types/calendar";
+import { parseDateInputValue } from "@/lib/eventCopy";
 
 interface EventDetailPopoverProps {
   event: CalendarEvent;
@@ -11,6 +21,7 @@ interface EventDetailPopoverProps {
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCopyToDate?: (event: CalendarEvent, targetDay: Date) => Promise<void> | void;
   /** Shift event time by delta minutes (positive = later). Only for non-recurring. */
   onMoveTime?: (event: CalendarEvent, deltaMinutes: number) => void;
 }
@@ -30,9 +41,17 @@ export function EventDetailPopover({
   onClose,
   onEdit,
   onDelete,
+  onCopyToDate,
   onMoveTime,
 }: EventDetailPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [showCopyControls, setShowCopyControls] = useState(false);
+  const [copyDate, setCopyDate] = useState(() =>
+    format(new Date(event.startTime), "yyyy-MM-dd")
+  );
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // Position popover. On desktop, show beside the event.
   // On mobile, show above the event and clamp within the viewport.
@@ -71,6 +90,13 @@ export function EventDetailPopover({
   }
 
   useEffect(() => {
+    setShowCopyControls(false);
+    setCopyDate(format(new Date(event.startTime), "yyyy-MM-dd"));
+    setCopyError("");
+    setCopySuccess(false);
+  }, [event.originalId, event.startTime]);
+
+  useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
@@ -105,6 +131,31 @@ export function EventDetailPopover({
   const start = new Date(event.startTime);
   const end = new Date(event.endTime);
 
+  const handleCopy = async () => {
+    if (!onCopyToDate) return;
+
+    const targetDay = parseDateInputValue(copyDate);
+    if (!targetDay) {
+      setCopyError("Choose a valid date.");
+      setCopySuccess(false);
+      return;
+    }
+
+    setCopying(true);
+    setCopyError("");
+    setCopySuccess(false);
+    try {
+      await onCopyToDate(event, targetDay);
+      setCopySuccess(true);
+    } catch (error) {
+      setCopyError(
+        error instanceof Error ? error.message : "Could not copy event."
+      );
+    } finally {
+      setCopying(false);
+    }
+  };
+
   return (
     <div
       ref={ref}
@@ -128,6 +179,25 @@ export function EventDetailPopover({
             {event.title}
           </h3>
           <div className="flex items-center gap-1 shrink-0">
+            {onCopyToDate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCopyControls((value) => !value);
+                  setCopyError("");
+                  setCopySuccess(false);
+                }}
+                className={`p-1 rounded transition-colors ${
+                  showCopyControls
+                    ? "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300"
+                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Copy"
+                aria-label="Copy event"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onEdit}
@@ -164,17 +234,64 @@ export function EventDetailPopover({
           </span>
         </div>
 
+        {showCopyControls && onCopyToDate && (
+          <div className="mb-3 border-y border-gray-100 py-2.5 dark:border-gray-800">
+            <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400">
+              Copy to date
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={copyDate}
+                onChange={(e) => {
+                  setCopyDate(e.target.value);
+                  setCopyError("");
+                  setCopySuccess(false);
+                }}
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              />
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={copying}
+                className="inline-flex h-8 min-w-16 items-center justify-center gap-1.5 rounded-lg bg-blue-500 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-60"
+              >
+                {copying ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : copySuccess ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  "Copy"
+                )}
+              </button>
+            </div>
+            {copyError && (
+              <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                {copyError}
+              </p>
+            )}
+            {copySuccess && !copyError && (
+              <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-300">
+                Copied.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Recurrence */}
         {event.recurrenceRule && (
-          <div className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mb-2">
-            <RotateCcw className="w-3 h-3" />
-            <span>{getRecurrenceLabel(event.recurrenceRule)}</span>
-            {event.recurrenceEndDate && (
-              <span>
-                · until{" "}
-                {format(new Date(event.recurrenceEndDate), "MMM d, yyyy")}
-              </span>
-            )}
+          <div className="mb-2 grid grid-cols-[0.75rem_minmax(0,1fr)] gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <RotateCcw className="mt-0.5 h-3 w-3" />
+            <p className="min-w-0 leading-snug">
+              <span>{getRecurrenceLabel(event.recurrenceRule)}</span>
+              {event.recurrenceEndDate && (
+                <span>
+                  {" "}
+                  · until{" "}
+                  {format(new Date(event.recurrenceEndDate), "MMM d, yyyy")}
+                </span>
+              )}
+            </p>
           </div>
         )}
 

@@ -28,6 +28,7 @@ import {
 } from "./ImportantDayEditorPopover";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import { fireCelebrationConfetti } from "@/lib/confetti";
+import { buildEventCopyPayload } from "@/lib/eventCopy";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
@@ -84,6 +85,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
+  const [gridScrollbarWidth, setGridScrollbarWidth] = useState(0);
   const notifPrefs = useNotificationPreferences();
 
   useEventReminderScheduler({ events, prefs: notifPrefs });
@@ -104,6 +106,29 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     scrollRef.current.scrollTop = scrollTo;
     didInitialScrollRef.current = true;
   }, [currentTime]);
+
+  useEffect(() => {
+    const measureScrollbar = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      setGridScrollbarWidth(el.offsetWidth - el.clientWidth);
+    };
+
+    measureScrollbar();
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(measureScrollbar)
+        : null;
+    if (scrollRef.current) {
+      resizeObserver?.observe(scrollRef.current);
+    }
+    window.addEventListener("resize", measureScrollbar);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", measureScrollbar);
+    };
+  }, [currentTime, showSidebar]);
 
   const weekEnd = useMemo(
     () => endOfWeek(weekStart, { weekStartsOn: 0 }),
@@ -350,6 +375,24 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     const res = await fetch(`/api/events?start=${start}&end=${end}`);
     if (res.ok) setEvents(await res.json());
   }, [weekStart, weekEnd]);
+
+  const handleCopyEventToDate = useCallback(
+    async (event: CalendarEvent, targetDay: Date) => {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildEventCopyPayload(event, targetDay)),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Could not copy event.");
+      }
+
+      await refreshEvents();
+    },
+    [refreshEvents]
+  );
 
   const applyRecurringMoveThisOnly = useCallback(async () => {
     if (!recurringMovePending) return;
@@ -713,7 +756,10 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
 
       {/* Day headers + todo sections */}
-      <div className="flex min-w-0 overflow-x-hidden border-b border-gray-200 dark:border-gray-700 shrink-0">
+      <div
+        className="flex min-w-0 overflow-x-hidden border-b border-gray-200 dark:border-gray-700 shrink-0"
+        style={{ paddingRight: gridScrollbarWidth }}
+      >
         {/* Time gutter spacer */}
         <div className="w-14 shrink-0 flex flex-col">
           <div className="h-[60px]" />
@@ -906,6 +952,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
           onDelete={handleDeleteFromPopover}
+          onCopyToDate={handleCopyEventToDate}
           onMoveTime={handleEventMoveTime}
         />
       )}

@@ -28,6 +28,7 @@ import {
   type ImportantDaySavePayload,
 } from "./ImportantDayEditorPopover";
 import { fireCelebrationConfetti } from "@/lib/confetti";
+import { buildEventCopyPayload } from "@/lib/eventCopy";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 
@@ -201,6 +202,24 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     const res = await fetch(`/api/events?start=${start}&end=${end}`);
     if (res.ok) setEvents(await res.json());
   }, [fetchStart, fetchEnd]);
+
+  const handleCopyEventToDate = useCallback(
+    async (event: CalendarEvent, targetDay: Date) => {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildEventCopyPayload(event, targetDay)),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Could not copy event.");
+      }
+
+      await refreshEvents();
+    },
+    [refreshEvents]
+  );
 
   const handleEventSaved = useCallback(
     async (_saved: CalendarEvent) => {
@@ -666,6 +685,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
           onClose={() => setPopoverEvent(null)}
           onEdit={handleEditFromPopover}
           onDelete={handleDeleteFromPopover}
+          onCopyToDate={handleCopyEventToDate}
           onMoveTime={handleEventMoveTime}
         />
       )}

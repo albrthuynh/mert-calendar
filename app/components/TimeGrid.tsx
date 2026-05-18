@@ -23,11 +23,12 @@ function hourLabel(hour: number): string {
   return `${hour - 12} PM`;
 }
 
-/** Group overlapping events into columns so they don't completely overlap. */
+/** Group overlapping events so they can stack full-width with readable layering. */
 function layoutEvents(events: CalendarEvent[]): Array<{
   event: CalendarEvent;
-  column: number;
-  totalColumns: number;
+  stackIndex: number;
+  stackSize: number;
+  hasSameColorOverlap: boolean;
 }> {
   if (events.length === 0) return [];
 
@@ -38,8 +39,9 @@ function layoutEvents(events: CalendarEvent[]): Array<{
 
   type LayoutItem = {
     event: CalendarEvent;
-    column: number;
-    totalColumns: number;
+    stackIndex: number;
+    stackSize: number;
+    hasSameColorOverlap: boolean;
   };
 
   const result: LayoutItem[] = [];
@@ -48,7 +50,6 @@ function layoutEvents(events: CalendarEvent[]): Array<{
 
   for (const event of sorted) {
     const eStart = new Date(event.startTime).getTime();
-    const eEnd = new Date(event.endTime).getTime();
     let placed = false;
 
     for (const group of groups) {
@@ -66,27 +67,18 @@ function layoutEvents(events: CalendarEvent[]): Array<{
   }
 
   for (const group of groups) {
-    const cols: CalendarEvent[][] = [];
+    const colorCounts = new Map<string, number>();
     for (const event of group) {
-      const eStart = new Date(event.startTime).getTime();
-      let placed = false;
-      for (const col of cols) {
-        const colEnd = Math.max(
-          ...col.map((c) => new Date(c.endTime).getTime())
-        );
-        if (eStart >= colEnd) {
-          col.push(event);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) cols.push([event]);
+      const color = event.color.toLowerCase();
+      colorCounts.set(color, (colorCounts.get(color) ?? 0) + 1);
     }
 
-    const total = cols.length;
-    cols.forEach((col, colIdx) => {
-      col.forEach((event) => {
-        result.push({ event, column: colIdx, totalColumns: total });
+    group.forEach((event, index) => {
+      result.push({
+        event,
+        stackIndex: index,
+        stackSize: group.length,
+        hasSameColorOverlap: (colorCounts.get(event.color.toLowerCase()) ?? 0) > 1,
       });
     });
   }
@@ -570,7 +562,7 @@ export function TimeGrid({
               ))}
 
               {/* Event blocks */}
-              {laid.map(({ event, column, totalColumns }) => {
+              {laid.map(({ event, stackIndex, stackSize, hasSameColorOverlap }) => {
                 const isResizing =
                   resizePreview &&
                   resizePreview.event.originalId === event.originalId &&
@@ -591,8 +583,9 @@ export function TimeGrid({
                     <EventBlock
                       event={event}
                       dayStart={day}
-                      columnIndex={column}
-                      totalColumns={totalColumns}
+                      stackIndex={stackIndex}
+                      stackSize={stackSize}
+                      hasSameColorOverlap={hasSameColorOverlap}
                       overrideStart={
                         isResizing ? resizePreview!.startTime : undefined
                       }
