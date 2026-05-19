@@ -21,6 +21,7 @@ import {
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { EventSidebar } from "./EventSidebar";
+import { RecurringEventDeleteModal } from "./RecurringEventDeleteModal";
 import { TodoItem } from "./TodoItem";
 import { TodoFormModal } from "./TodoFormModal";
 import {
@@ -30,6 +31,11 @@ import {
 import { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { buildEventCopyPayload } from "@/lib/eventCopy";
+import {
+  buildEventDeleteRequest,
+  type EventDeleteScope,
+  removeDeletedEventFromList,
+} from "@/lib/eventDelete";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
@@ -67,6 +73,10 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | undefined>();
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [showEventSidebar, setShowEventSidebar] = useState(false);
+  const [recurringDeletePending, setRecurringDeletePending] =
+    useState<CalendarEvent | null>(null);
+  const [recurringDeleteBusy, setRecurringDeleteBusy] = useState(false);
+  const [recurringDeleteError, setRecurringDeleteError] = useState<string | null>(null);
 
   const [showTodoModal, setShowTodoModal] = useState(false);
   const [importantDayEditor, setImportantDayEditor] = useState<{
@@ -233,14 +243,50 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const handleDeleteFromPopover = useCallback(async () => {
     if (!popoverEvent) return;
-    await fetch(`/api/events/${popoverEvent.originalId}`, {
-      method: "DELETE",
-    });
-    setEvents((prev) =>
-      prev.filter((e) => e.originalId !== popoverEvent.originalId)
+    if (popoverEvent.isRecurringInstance && popoverEvent.recurrenceRule) {
+      setRecurringDeletePending(popoverEvent);
+      setRecurringDeleteError(null);
+      setPopoverEvent(null);
+      return;
+    }
+
+    const res = await fetch(
+      `/api/events/${popoverEvent.originalId}`,
+      buildEventDeleteRequest(popoverEvent)
     );
+    if (!res.ok) return;
+    setEvents((prev) => removeDeletedEventFromList(prev, popoverEvent));
     setPopoverEvent(null);
   }, [popoverEvent]);
+
+  const applyRecurringDelete = useCallback(
+    async (scope: EventDeleteScope) => {
+      if (!recurringDeletePending) return;
+      setRecurringDeleteBusy(true);
+      setRecurringDeleteError(null);
+      try {
+        const res = await fetch(
+          `/api/events/${recurringDeletePending.originalId}`,
+          buildEventDeleteRequest(recurringDeletePending, scope)
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not delete event.");
+        }
+        setEvents((prev) =>
+          removeDeletedEventFromList(prev, recurringDeletePending, scope)
+        );
+        setRecurringDeletePending(null);
+      } catch (error) {
+        setRecurringDeleteError(
+          error instanceof Error ? error.message : "Something went wrong"
+        );
+      } finally {
+        setRecurringDeleteBusy(false);
+      }
+    },
+    [recurringDeletePending]
+  );
 
   const handleDeleteFromSidebar = useCallback(async () => {
     if (!editingEvent) return;
@@ -725,6 +771,22 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           </div>
         )}
       </div>
+
+      {recurringDeletePending && (
+        <RecurringEventDeleteModal
+          eventTitle={recurringDeletePending.title}
+          busy={recurringDeleteBusy}
+          error={recurringDeleteError}
+          onClose={() => {
+            if (!recurringDeleteBusy) {
+              setRecurringDeletePending(null);
+              setRecurringDeleteError(null);
+            }
+          }}
+          onChooseThisOnly={() => applyRecurringDelete("single")}
+          onChooseAll={() => applyRecurringDelete("series")}
+        />
+      )}
 
       {/* Create / Edit event modal (slot click or edit from popover) */}
       {showEventModal && (

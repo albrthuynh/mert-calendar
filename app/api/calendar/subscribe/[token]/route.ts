@@ -45,6 +45,7 @@ export async function GET(
       where: {
         userId: user.id,
         parentEventId: null,
+        deleted: false,
         recurrenceRule: null,
         startTime: { lte: oneYearFromNow },
         endTime: { gte: oneMonthAgo },
@@ -54,6 +55,7 @@ export async function GET(
       where: {
         userId: user.id,
         parentEventId: null,
+        deleted: false,
         NOT: { recurrenceRule: null },
         startTime: { lte: oneYearFromNow },
         OR: [
@@ -145,6 +147,10 @@ export async function GET(
 
         // If there's an override, use its values
         if (override) {
+          if (override.deleted) {
+            continue;
+          }
+
           const calEvent = calendar.createEvent({
             id: override.id,
             start: override.startTime,

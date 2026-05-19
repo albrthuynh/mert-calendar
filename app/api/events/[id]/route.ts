@@ -79,7 +79,14 @@ export async function PUT(
         { status: 400 }
       );
     }
-    const instanceStartIso = new Date(instanceStartTime).toISOString();
+    const instanceStart = new Date(instanceStartTime);
+    if (Number.isNaN(instanceStart.getTime())) {
+      return NextResponse.json(
+        { error: "instanceStartTime must be a valid ISO timestamp" },
+        { status: 400 }
+      );
+    }
+    const instanceStartIso = instanceStart.toISOString();
     const instanceId = makeInstanceId(existing.id, instanceStartIso);
     const seriesDurationMs = existing.endTime.getTime() - existing.startTime.getTime();
 
@@ -144,6 +151,7 @@ export async function PUT(
         // A per-instance override is always non-recurring.
         recurrenceRule: null,
         recurrenceEndDate: null,
+        deleted: false,
       },
       create: {
         instanceId,
@@ -161,6 +169,7 @@ export async function PUT(
         allDay: allDay ?? existing.allDay,
         recurrenceRule: null,
         recurrenceEndDate: null,
+        deleted: false,
         reminderMinutes:
           cleanReminderMinutes === undefined ? (existing.reminderMinutes ?? null) : cleanReminderMinutes,
         reminderDisabled:
@@ -250,7 +259,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -267,6 +276,66 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const body = await req.json().catch(() => ({}));
+  const editScope = body?.editScope;
+  const instanceStartTime = body?.instanceStartTime;
+
+  if (editScope === "single") {
+    if (!existing.recurrenceRule) {
+      return NextResponse.json(
+        { error: "editScope=single is only supported for recurring events" },
+        { status: 400 }
+      );
+    }
+    if (!instanceStartTime) {
+      return NextResponse.json(
+        { error: "instanceStartTime is required when editScope=single" },
+        { status: 400 }
+      );
+    }
+
+    const instanceStart = new Date(instanceStartTime);
+    if (Number.isNaN(instanceStart.getTime())) {
+      return NextResponse.json(
+        { error: "instanceStartTime must be a valid ISO timestamp" },
+        { status: 400 }
+      );
+    }
+    const instanceStartIso = instanceStart.toISOString();
+
+    const instanceId = makeInstanceId(existing.id, instanceStartIso);
+    const seriesDurationMs = existing.endTime.getTime() - existing.startTime.getTime();
+
+    await prisma.event.upsert({
+      where: { instanceId },
+      update: {
+        deleted: true,
+        recurrenceRule: null,
+        recurrenceEndDate: null,
+      },
+      create: {
+        instanceId,
+        parentEventId: existing.id,
+        userId: session.user.id,
+        title: existing.title,
+        description: existing.description,
+        link: existing.link,
+        startTime: new Date(instanceStartIso),
+        endTime: new Date(new Date(instanceStartIso).getTime() + seriesDurationMs),
+        color: existing.color,
+        allDay: existing.allDay,
+        recurrenceRule: null,
+        recurrenceEndDate: null,
+        reminderMinutes: existing.reminderMinutes ?? null,
+        reminderDisabled: existing.reminderDisabled ?? false,
+        deleted: true,
+      },
+    });
+    bumpUserDataVersion("events", session.user.id);
+    return NextResponse.json({ success: true });
+  }
+
+  await prisma.event.deleteMany({ where: { parentEventId: id } });
   await prisma.event.delete({ where: { id } });
   bumpUserDataVersion("events", session.user.id);
   return NextResponse.json({ success: true });

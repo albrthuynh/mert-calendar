@@ -52,6 +52,7 @@ async function loadEventsForRange(
       where: {
         userId,
         parentEventId: null,
+        deleted: false,
         recurrenceRule: null,
         startTime: { lte: rangeEnd },
         endTime: { gte: rangeStart },
@@ -61,6 +62,7 @@ async function loadEventsForRange(
       where: {
         userId,
         parentEventId: null,
+        deleted: false,
         NOT: { recurrenceRule: null },
         startTime: { lte: rangeEnd },
         OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: rangeStart } }],
@@ -119,6 +121,10 @@ async function loadEventsForRange(
         const override = overridesByInstanceId.get(instanceId);
 
         if (override) {
+          if (override.deleted) {
+            continue;
+          }
+
           result.push({
             id: override.id,
             title: override.title,

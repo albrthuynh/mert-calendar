@@ -14,6 +14,7 @@ import {
 import { ChevronLeft, ChevronRight, ListTodo } from "lucide-react";
 import { TimeGrid } from "./TimeGrid";
 import { RecurringEventMoveModal } from "./RecurringEventMoveModal";
+import { RecurringEventDeleteModal } from "./RecurringEventDeleteModal";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { EventSidebar } from "./EventSidebar";
@@ -29,6 +30,11 @@ import {
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { buildEventCopyPayload } from "@/lib/eventCopy";
+import {
+  buildEventDeleteRequest,
+  type EventDeleteScope,
+  removeDeletedEventFromList,
+} from "@/lib/eventDelete";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
@@ -82,6 +88,10 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   } | null>(null);
   const [recurringMoveBusy, setRecurringMoveBusy] = useState(false);
   const [recurringMoveError, setRecurringMoveError] = useState<string | null>(null);
+  const [recurringDeletePending, setRecurringDeletePending] =
+    useState<CalendarEvent | null>(null);
+  const [recurringDeleteBusy, setRecurringDeleteBusy] = useState(false);
+  const [recurringDeleteError, setRecurringDeleteError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
@@ -499,14 +509,50 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
 
   const handleDeleteFromPopover = useCallback(async () => {
     if (!popoverEvent) return;
-    await fetch(`/api/events/${popoverEvent.originalId}`, {
-      method: "DELETE",
-    });
-    setEvents((prev) =>
-      prev.filter((e) => e.originalId !== popoverEvent.originalId)
+    if (popoverEvent.isRecurringInstance && popoverEvent.recurrenceRule) {
+      setRecurringDeletePending(popoverEvent);
+      setRecurringDeleteError(null);
+      setPopoverEvent(null);
+      return;
+    }
+
+    const res = await fetch(
+      `/api/events/${popoverEvent.originalId}`,
+      buildEventDeleteRequest(popoverEvent)
     );
+    if (!res.ok) return;
+    setEvents((prev) => removeDeletedEventFromList(prev, popoverEvent));
     setPopoverEvent(null);
   }, [popoverEvent]);
+
+  const applyRecurringDelete = useCallback(
+    async (scope: EventDeleteScope) => {
+      if (!recurringDeletePending) return;
+      setRecurringDeleteBusy(true);
+      setRecurringDeleteError(null);
+      try {
+        const res = await fetch(
+          `/api/events/${recurringDeletePending.originalId}`,
+          buildEventDeleteRequest(recurringDeletePending, scope)
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not delete event.");
+        }
+        setEvents((prev) =>
+          removeDeletedEventFromList(prev, recurringDeletePending, scope)
+        );
+        setRecurringDeletePending(null);
+      } catch (error) {
+        setRecurringDeleteError(
+          error instanceof Error ? error.message : "Something went wrong"
+        );
+      } finally {
+        setRecurringDeleteBusy(false);
+      }
+    },
+    [recurringDeletePending]
+  );
 
   const handleDeleteFromSidebar = useCallback(async () => {
     if (!editingEvent) return;
@@ -928,6 +974,22 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           }}
           onChooseThisOnly={applyRecurringMoveThisOnly}
           onChooseAll={applyRecurringMoveAll}
+        />
+      )}
+
+      {recurringDeletePending && (
+        <RecurringEventDeleteModal
+          eventTitle={recurringDeletePending.title}
+          busy={recurringDeleteBusy}
+          error={recurringDeleteError}
+          onClose={() => {
+            if (!recurringDeleteBusy) {
+              setRecurringDeletePending(null);
+              setRecurringDeleteError(null);
+            }
+          }}
+          onChooseThisOnly={() => applyRecurringDelete("single")}
+          onChooseAll={() => applyRecurringDelete("series")}
         />
       )}
 

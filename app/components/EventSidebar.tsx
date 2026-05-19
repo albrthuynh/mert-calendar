@@ -6,6 +6,7 @@ import { Link, X, Trash2 } from "lucide-react";
 import { CalendarEvent } from "@/types/calendar";
 import { ColorPicker } from "./ColorPicker";
 import { RecurrenceSelector } from "./RecurrenceSelector";
+import { buildEventDeleteRequest } from "@/lib/eventDelete";
 
 interface EventSidebarProps {
   initialDate?: Date;
@@ -186,9 +187,10 @@ export function EventSidebar({
         onDelete();
         return;
       }
-      const res = await fetch(`/api/events/${event.originalId}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/events/${event.originalId}`,
+        buildEventDeleteRequest(event)
+      );
       if (res.ok) {
         onDelete();
       } else {

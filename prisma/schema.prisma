@@ -89,6 +89,7 @@ model Event {
   recurrenceEndDate DateTime?
   reminderMinutes   Int?
   reminderDisabled  Boolean   @default(false)
+  deleted           Boolean   @default(false)
   userId            String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
