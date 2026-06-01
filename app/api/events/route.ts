@@ -7,6 +7,10 @@ import {
   getUserDataVersion,
 } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
+import {
+  pushLocalEventToGoogle,
+  syncGoogleCalendarForUser,
+} from "@/lib/googleCalendar";
 import { RRule } from "rrule";
 
 const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -208,6 +212,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  await syncGoogleCalendarForUser(session.user.id).catch((error) => {
+    console.error("Google Calendar auto-sync failed", error);
+  });
+
   const version = getUserDataVersion("events", session.user.id);
   const cacheKey = [
     "events",
@@ -309,6 +317,9 @@ export async function POST(req: NextRequest) {
       reminderDisabled: cleanReminderDisabled,
       userId: session.user.id,
     },
+  });
+  await pushLocalEventToGoogle(session.user.id, event.id).catch((error) => {
+    console.error("Google Calendar push failed", error);
   });
   bumpUserDataVersion("events", session.user.id);
 

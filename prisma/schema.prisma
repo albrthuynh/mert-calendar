@@ -46,6 +46,9 @@ model User {
   notificationSound        String?
   notificationVolume       Int       @default(80)
   calendarSubscriptionToken String?  @unique @default(cuid())
+  googleCalendarSyncEnabled Boolean   @default(false)
+  googleCalendarSyncToken    String?
+  googleCalendarLastSyncedAt DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
   accounts                 Account[]
@@ -90,6 +93,11 @@ model Event {
   reminderMinutes   Int?
   reminderDisabled  Boolean   @default(false)
   deleted           Boolean   @default(false)
+  googleCalendarId  String?
+  googleEventId     String?
+  googleEtag        String?
+  googleUpdatedAt   DateTime?
+  googleSyncedAt    DateTime?
   userId            String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -99,6 +107,8 @@ model Event {
   childEvents   Event[] @relation("EventChildren")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, googleCalendarId, googleEventId])
 }
 
 model Todo {

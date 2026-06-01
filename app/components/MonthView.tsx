@@ -213,6 +213,13 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     if (res.ok) setEvents(await res.json());
   }, [fetchStart, fetchEnd]);
 
+  useEffect(() => {
+    window.addEventListener("mert-calendar:events-updated", refreshEvents);
+    return () => {
+      window.removeEventListener("mert-calendar:events-updated", refreshEvents);
+    };
+  }, [refreshEvents]);
+
   const handleCopyEventToDate = useCallback(
     async (event: CalendarEvent, targetDay: Date) => {
       const res = await fetch("/api/events", {

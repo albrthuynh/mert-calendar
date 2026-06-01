@@ -10,6 +10,13 @@ export const authConfig: NextAuthConfig = {
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      authorization: {
+        params: {
+          access_type: "offline",
+          scope:
+            "openid email profile https://www.googleapis.com/auth/calendar.events",
+        },
+      },
     }),
   ],
   pages: {

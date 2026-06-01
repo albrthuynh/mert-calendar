@@ -188,6 +188,13 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     if (res.ok) setEvents(await res.json());
   }, [currentDay]);
 
+  useEffect(() => {
+    window.addEventListener("mert-calendar:events-updated", refreshEvents);
+    return () => {
+      window.removeEventListener("mert-calendar:events-updated", refreshEvents);
+    };
+  }, [refreshEvents]);
+
   const handleCopyEventToDate = useCallback(
     async (event: CalendarEvent, targetDay: Date) => {
       const res = await fetch("/api/events", {

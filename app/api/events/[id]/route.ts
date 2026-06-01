@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { bumpUserDataVersion } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
+import {
+  deleteLocalEventFromGoogle,
+  pushLocalEventToGoogle,
+} from "@/lib/googleCalendar";
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
@@ -176,6 +180,9 @@ export async function PUT(
           cleanReminderDisabled === undefined ? (existing.reminderDisabled ?? false) : cleanReminderDisabled,
       },
     });
+    await pushLocalEventToGoogle(session.user.id, override.id).catch((error) => {
+      console.error("Google Calendar push failed", error);
+    });
     bumpUserDataVersion("events", session.user.id);
 
     return NextResponse.json(override);
@@ -253,6 +260,9 @@ export async function PUT(
       ...(cleanReminderDisabled !== undefined && { reminderDisabled: cleanReminderDisabled }),
     },
   });
+  await pushLocalEventToGoogle(session.user.id, updated.id).catch((error) => {
+    console.error("Google Calendar push failed", error);
+  });
   bumpUserDataVersion("events", session.user.id);
 
   return NextResponse.json(updated);
@@ -305,6 +315,15 @@ export async function DELETE(
 
     const instanceId = makeInstanceId(existing.id, instanceStartIso);
     const seriesDurationMs = existing.endTime.getTime() - existing.startTime.getTime();
+    const existingOverride = await prisma.event.findUnique({
+      where: { instanceId },
+      select: { googleEventId: true, parentEventId: true },
+    });
+    if (existingOverride) {
+      await deleteLocalEventFromGoogle(session.user.id, existingOverride).catch((error) => {
+        console.error("Google Calendar delete failed", error);
+      });
+    }
 
     await prisma.event.upsert({
       where: { instanceId },
@@ -335,6 +354,12 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   }
 
+  await deleteLocalEventFromGoogle(session.user.id, {
+    googleEventId: existing.googleEventId,
+    parentEventId: existing.parentEventId,
+  }).catch((error) => {
+    console.error("Google Calendar delete failed", error);
+  });
   await prisma.event.deleteMany({ where: { parentEventId: id } });
   await prisma.event.delete({ where: { id } });
   bumpUserDataVersion("events", session.user.id);
