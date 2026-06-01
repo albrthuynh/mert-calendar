@@ -189,8 +189,10 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   }, [currentDay]);
 
   useEffect(() => {
+    const interval = window.setInterval(refreshEvents, 10000);
     window.addEventListener("mert-calendar:events-updated", refreshEvents);
     return () => {
+      window.clearInterval(interval);
       window.removeEventListener("mert-calendar:events-updated", refreshEvents);
     };
   }, [refreshEvents]);

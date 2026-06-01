@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
+import { randomBytes, randomUUID } from "crypto";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_ID = "primary";
 const GOOGLE_API_BASE = "https://www.googleapis.com/calendar/v3";
 const AUTO_SYNC_COOLDOWN_MS = 60 * 1000;
+const WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
+const WATCH_DURATION_MS = 6 * 24 * 60 * 60 * 1000;
 
 type GoogleAccount = {
   id: string;
@@ -63,11 +66,22 @@ type GoogleTokenResponse = {
   error_description?: string;
 };
 
+type GoogleChannelResponse = {
+  id: string;
+  resourceId?: string;
+  resourceUri?: string;
+  token?: string;
+  expiration?: string;
+};
+
 export type GoogleCalendarStatus = {
   connected: boolean;
   enabled: boolean;
   hasCalendarScope: boolean;
   lastSyncedAt: string | null;
+  webhookConfigured: boolean;
+  watchActive: boolean;
+  watchExpiresAt: string | null;
 };
 
 class GoogleCalendarSyncError extends Error {
@@ -101,7 +115,7 @@ async function getGoogleAccount(userId: string): Promise<GoogleAccount | null> {
 export async function getGoogleCalendarStatus(
   userId: string
 ): Promise<GoogleCalendarStatus> {
-  const [user, account] = await Promise.all([
+  const [user, account, activeChannel] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -110,6 +124,16 @@ export async function getGoogleCalendarStatus(
       },
     }),
     getGoogleAccount(userId),
+    prisma.googleCalendarChannel.findFirst({
+      where: {
+        userId,
+        calendarId: GOOGLE_CALENDAR_ID,
+        active: true,
+        OR: [{ expiration: null }, { expiration: { gt: new Date() } }],
+      },
+      orderBy: { expiration: "desc" },
+      select: { expiration: true },
+    }),
   ]);
 
   return {
@@ -117,6 +141,9 @@ export async function getGoogleCalendarStatus(
     enabled: user?.googleCalendarSyncEnabled ?? false,
     hasCalendarScope: hasCalendarScope(account?.scope),
     lastSyncedAt: user?.googleCalendarLastSyncedAt?.toISOString() ?? null,
+    webhookConfigured: !!getGoogleCalendarWebhookAddress(false),
+    watchActive: !!activeChannel,
+    watchExpiresAt: activeChannel?.expiration?.toISOString() ?? null,
   };
 }
 
@@ -218,6 +245,215 @@ async function googleCalendarFetch<T>(
   }
 
   return payload as T;
+}
+
+function getGoogleCalendarWebhookAddress(throwIfMissing = true) {
+  const explicitUrl = process.env.GOOGLE_CALENDAR_WEBHOOK_URL?.trim();
+  if (explicitUrl) return explicitUrl;
+
+  const baseUrl =
+    process.env.NEXTAUTH_URL?.trim() ||
+    process.env.AUTH_URL?.trim() ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+  if (!baseUrl) {
+    if (!throwIfMissing) return null;
+    throw new GoogleCalendarSyncError(
+      "Set GOOGLE_CALENDAR_WEBHOOK_URL to a public HTTPS /api/google-calendar/webhook URL before enabling instant sync.",
+      409
+    );
+  }
+
+  const address = new URL("/api/google-calendar/webhook", baseUrl).toString();
+  if (!address.startsWith("https://")) {
+    if (!throwIfMissing) return null;
+    throw new GoogleCalendarSyncError(
+      "Google Calendar webhooks require HTTPS. Set GOOGLE_CALENDAR_WEBHOOK_URL to your deployed app or HTTPS tunnel.",
+      409
+    );
+  }
+
+  return address;
+}
+
+function googleChannelExpirationToDate(expiration: string | undefined) {
+  if (!expiration) return null;
+  const timestamp = Number(expiration);
+  if (!Number.isFinite(timestamp)) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+async function stopGoogleCalendarChannel(
+  userId: string,
+  channel: { channelId: string; resourceId: string | null }
+) {
+  if (!channel.resourceId) return;
+
+  await googleCalendarFetch<void>(userId, "/channels/stop", {
+    method: "POST",
+    body: JSON.stringify({
+      id: channel.channelId,
+      resourceId: channel.resourceId,
+    }),
+  }).catch((error) => {
+    if (error instanceof GoogleCalendarSyncError && error.status === 404) return;
+    throw error;
+  });
+}
+
+export async function ensureGoogleCalendarWatch(
+  userId: string,
+  options: { force?: boolean } = {}
+) {
+  const address = getGoogleCalendarWebhookAddress();
+  const now = new Date();
+  const existing = await prisma.googleCalendarChannel.findFirst({
+    where: {
+      userId,
+      calendarId: GOOGLE_CALENDAR_ID,
+      active: true,
+    },
+    orderBy: { expiration: "desc" },
+  });
+
+  const needsRenewal =
+    options.force ||
+    !existing ||
+    !existing.expiration ||
+    existing.expiration.getTime() - now.getTime() < WATCH_RENEWAL_WINDOW_MS;
+
+  if (!needsRenewal && existing) {
+    return existing;
+  }
+
+  if (existing) {
+    await stopGoogleCalendarChannel(userId, existing).catch((error) => {
+      console.error("Google Calendar channel stop failed", error);
+    });
+  }
+
+  const channelId = randomUUID();
+  const token = randomBytes(24).toString("hex");
+  const requestedExpiration = new Date(now.getTime() + WATCH_DURATION_MS);
+  const googleChannel = await googleCalendarFetch<GoogleChannelResponse>(
+    userId,
+    `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events/watch`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        id: channelId,
+        type: "web_hook",
+        address,
+        token,
+        expiration: requestedExpiration.getTime().toString(),
+      }),
+    }
+  );
+
+  const expiration =
+    googleChannelExpirationToDate(googleChannel.expiration) ?? requestedExpiration;
+
+  await prisma.googleCalendarChannel.updateMany({
+    where: {
+      userId,
+      calendarId: GOOGLE_CALENDAR_ID,
+      active: true,
+      channelId: { not: channelId },
+    },
+    data: { active: false },
+  });
+
+  return prisma.googleCalendarChannel.create({
+    data: {
+      userId,
+      calendarId: GOOGLE_CALENDAR_ID,
+      channelId,
+      resourceId: googleChannel.resourceId ?? null,
+      token,
+      expiration,
+      active: true,
+    },
+  });
+}
+
+export async function handleGoogleCalendarWebhook(headers: Headers) {
+  const channelId = headers.get("x-goog-channel-id");
+  const token = headers.get("x-goog-channel-token");
+  const resourceState = headers.get("x-goog-resource-state");
+
+  if (!channelId || !token) {
+    throw new GoogleCalendarSyncError("Missing Google Calendar channel headers.", 400);
+  }
+
+  const channel = await prisma.googleCalendarChannel.findFirst({
+    where: {
+      channelId,
+      token,
+      active: true,
+    },
+    select: {
+      id: true,
+      userId: true,
+      expiration: true,
+    },
+  });
+
+  if (!channel) {
+    throw new GoogleCalendarSyncError("Unknown Google Calendar channel.", 404);
+  }
+
+  if (channel.expiration && channel.expiration.getTime() <= Date.now()) {
+    await prisma.googleCalendarChannel.update({
+      where: { id: channel.id },
+      data: { active: false },
+    });
+    throw new GoogleCalendarSyncError("Google Calendar channel expired.", 410);
+  }
+
+  if (resourceState === "sync") {
+    return { synced: false, resourceState };
+  }
+
+  await syncGoogleCalendarForUser(channel.userId, { force: true });
+  await ensureGoogleCalendarWatch(channel.userId).catch((error) => {
+    console.error("Google Calendar watch renewal failed", error);
+  });
+
+  return { synced: true, resourceState };
+}
+
+export async function renewGoogleCalendarWatches() {
+  const users = await prisma.user.findMany({
+    where: {
+      googleCalendarSyncEnabled: true,
+      accounts: {
+        some: {
+          provider: "google",
+          scope: { contains: GOOGLE_CALENDAR_SCOPE },
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  const result = {
+    checked: users.length,
+    ensured: 0,
+    failed: 0,
+  };
+
+  for (const user of users) {
+    try {
+      await ensureGoogleCalendarWatch(user.id);
+      result.ensured += 1;
+    } catch (error) {
+      result.failed += 1;
+      console.error("Google Calendar watch renewal failed", error);
+    }
+  }
+
+  return result;
 }
 
 function googleDateToDate(value: GoogleEventDate | undefined): Date | null {

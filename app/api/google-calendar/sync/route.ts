@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
+  ensureGoogleCalendarWatch,
   getGoogleCalendarStatus,
   isGoogleCalendarSyncError,
   syncGoogleCalendarForUser,
@@ -23,7 +24,20 @@ export async function POST() {
 
   try {
     const result = await syncGoogleCalendarForUser(session.user.id, { force: true });
-    return NextResponse.json(result);
+    const watch = await ensureGoogleCalendarWatch(session.user.id)
+      .then((channel) => ({
+        active: true,
+        expiresAt: channel.expiration?.toISOString() ?? null,
+      }))
+      .catch((error) => ({
+        active: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Google Calendar webhook setup failed.",
+      }));
+
+    return NextResponse.json({ ...result, watch });
   } catch (error) {
     const statusCode = isGoogleCalendarSyncError(error) ? error.status : 500;
     return NextResponse.json(

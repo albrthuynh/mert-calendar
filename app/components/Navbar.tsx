@@ -19,6 +19,9 @@ type GoogleCalendarStatus = {
   enabled: boolean;
   hasCalendarScope: boolean;
   lastSyncedAt: string | null;
+  webhookConfigured: boolean;
+  watchActive: boolean;
+  watchExpiresAt: string | null;
 };
 
 function UserMenu({
@@ -68,8 +71,12 @@ function UserMenu({
     ? "Not connected"
     : !googleStatus.hasCalendarScope
       ? "Calendar access needed"
+      : googleStatus.enabled && googleStatus.watchActive
+      ? "Connected, instant sync on"
+      : googleStatus.enabled && !googleStatus.webhookConfigured
+      ? "Connected, webhook URL needed"
       : googleStatus.enabled && googleStatus.lastSyncedAt
-      ? "Connected, sync enabled"
+      ? "Connected, pull sync on"
       : googleStatus.enabled
       ? "Connected, waiting for first sync"
       : "Connected, sync off";
@@ -97,8 +104,12 @@ function UserMenu({
         const payload = await res.json().catch(() => ({}));
         throw new Error(payload.error || "Google Calendar sync failed.");
       }
+      const payload = await res.json().catch(() => null);
       const statusRes = await fetch("/api/google-calendar/status");
       if (statusRes.ok) setGoogleStatus(await statusRes.json());
+      if (payload?.watch?.error) {
+        setGoogleError(payload.watch.error);
+      }
       window.dispatchEvent(new Event("mert-calendar:events-updated"));
     } catch (error) {
       setGoogleError(
@@ -160,6 +171,12 @@ function UserMenu({
             {googleStatus?.lastSyncedAt && !googleError && (
               <div className="px-3 pb-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
                 Last sync {new Date(googleStatus.lastSyncedAt).toLocaleString()}
+              </div>
+            )}
+            {googleStatus?.watchExpiresAt && !googleError && (
+              <div className="px-3 pb-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                Instant sync renews by{" "}
+                {new Date(googleStatus.watchExpiresAt).toLocaleDateString()}
               </div>
             )}
             <button
