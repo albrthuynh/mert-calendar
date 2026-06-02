@@ -4,11 +4,17 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   startOfDay,
   endOfDay,
+  startOfMonth,
+  endOfMonth,
   addDays,
   subDays,
+  addMonths,
+  subMonths,
   startOfWeek,
+  endOfWeek,
   format,
   isSameDay,
+  isSameMonth,
   isToday,
 } from "date-fns";
 import {
@@ -41,6 +47,7 @@ import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
 
 type MobileTab = "todos" | "events";
+type MobileCalendarMode = "day" | "month";
 
 interface MobileDayViewProps {
   backgroundUrl?: string;
@@ -59,6 +66,35 @@ function defaultEventStartForDay(day: Date): Date {
   return start;
 }
 
+function getMobileMonthDays(monthStart: Date): Date[] {
+  const start = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const end = endOfWeek(endOfMonth(monthStart), { weekStartsOn: 0 });
+
+  const days: Date[] = [];
+  let current = start;
+  while (current <= end) {
+    days.push(current);
+    current = addDays(current, 1);
+  }
+  return days;
+}
+
+function getEventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
+  const dayStart = startOfDay(day);
+  const dayEnd = endOfDay(day);
+
+  return events
+    .filter((event) => {
+      const eventStart = new Date(event.startTime);
+      const eventEnd = new Date(event.endTime);
+      return eventStart <= dayEnd && eventEnd >= dayStart;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+}
+
 export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [currentDay, setCurrentDay] = useState<Date>(() => startOfDay(new Date()));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -66,6 +102,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<MobileTab>("events");
+  const [calendarMode, setCalendarMode] = useState<MobileCalendarMode>("day");
 
   // Modal / popover / sidebar state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -93,11 +130,21 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   // Calculate the week days (starting from Sunday)
   const weekStart = startOfWeek(currentDay, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const mobileMonthStart = startOfMonth(currentDay);
+  const mobileMonthDays = getMobileMonthDays(mobileMonthStart);
+  const visibleStart =
+    calendarMode === "month"
+      ? startOfDay(mobileMonthDays[0])
+      : startOfDay(currentDay);
+  const visibleEnd =
+    calendarMode === "month"
+      ? endOfDay(mobileMonthDays[mobileMonthDays.length - 1])
+      : endOfDay(currentDay);
 
-  // Fetch events + todos when the visible day changes
+  // Fetch events + todos when the visible mobile range changes.
   useEffect(() => {
-    const start = startOfDay(currentDay).toISOString();
-    const end = endOfDay(currentDay).toISOString();
+    const start = visibleStart.toISOString();
+    const end = visibleEnd.toISOString();
 
     const fetchAll = async () => {
       setLoading(true);
@@ -116,11 +163,11 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     };
 
     fetchAll();
-  }, [currentDay]);
+  }, [calendarMode, currentDay]);
 
   useEffect(() => {
-    const startKey = format(weekStart, "yyyy-MM-dd");
-    const endKey = format(addDays(weekStart, 6), "yyyy-MM-dd");
+    const startKey = format(visibleStart, "yyyy-MM-dd");
+    const endKey = format(visibleEnd, "yyyy-MM-dd");
 
     const fetchImportantDays = async () => {
       try {
@@ -136,7 +183,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     };
 
     fetchImportantDays();
-  }, [weekStart]);
+  }, [calendarMode, currentDay]);
 
   const goToPrevWeek = useCallback(
     () => setCurrentDay((d) => startOfDay(subDays(d, 7))),
@@ -150,6 +197,16 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const goToToday = useCallback(
     () => setCurrentDay(startOfDay(new Date())),
+    []
+  );
+
+  const goToPrevMonth = useCallback(
+    () => setCurrentDay((d) => startOfDay(subMonths(d, 1))),
+    []
+  );
+
+  const goToNextMonth = useCallback(
+    () => setCurrentDay((d) => startOfDay(addMonths(d, 1))),
     []
   );
 
@@ -182,11 +239,20 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   // ── Event handlers ──────────────────────────────────────────
 
   const refreshEvents = useCallback(async () => {
-    const start = startOfDay(currentDay).toISOString();
-    const end = endOfDay(currentDay).toISOString();
+    const rangeStart =
+      calendarMode === "month"
+        ? startOfDay(getMobileMonthDays(startOfMonth(currentDay))[0])
+        : startOfDay(currentDay);
+    const monthDays = getMobileMonthDays(startOfMonth(currentDay));
+    const rangeEnd =
+      calendarMode === "month"
+        ? endOfDay(monthDays[monthDays.length - 1])
+        : endOfDay(currentDay);
+    const start = rangeStart.toISOString();
+    const end = rangeEnd.toISOString();
     const res = await fetch(`/api/events?start=${start}&end=${end}`);
     if (res.ok) setEvents(await res.json());
-  }, [currentDay]);
+  }, [calendarMode, currentDay]);
 
   useEffect(() => {
     const interval = window.setInterval(refreshEvents, 10000);
@@ -440,9 +506,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   );
   const completedCount = dayTodos.filter((t) => t.completed).length;
 
-  const dayEvents = events.filter((e) =>
-    isSameDay(new Date(e.startTime), currentDay)
-  ).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const dayEvents = getEventsForDay(events, currentDay);
   const selectedDayKey = format(currentDay, "yyyy-MM-dd");
   const selectedImportantLabel =
     importantDays.find((day) => day.date === selectedDayKey)?.label.trim() ?? "";
@@ -464,72 +528,182 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900"
       style={containerStyle}
     >
-      {/* Week Selector */}
-      <div
-        className={`flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 ${overBackgroundClass}`}
-      >
-        <button
-          type="button"
-          onClick={goToPrevWeek}
-          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          aria-label="Previous week"
+      {calendarMode === "day" ? (
+        <div
+          className={`flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 ${overBackgroundClass}`}
         >
-          <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-        </button>
-        <div className="flex-1 grid grid-cols-7 gap-1">
-          {weekDays.map((day) => {
-            const isSelected = isSameDay(day, currentDay);
-            const isDayToday = isToday(day);
-            const dateKey = format(day, "yyyy-MM-dd");
-            const importantLabel =
-              importantDays.find((importantDay) => importantDay.date === dateKey)?.label.trim() ?? "";
-            return (
-              <button
-                key={day.toISOString()}
-                type="button"
-                onClick={() => selectDay(day)}
-                className={`flex flex-col items-center py-2 px-1 rounded-lg transition-colors ${
-                  isSelected
-                    ? "bg-blue-500 text-white"
-                    : isDayToday
-                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                    : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                <span className="text-[10px] font-medium uppercase">
-                  {format(day, "EEE")}
-                </span>
-                <span className={`text-sm font-semibold mt-0.5 ${
-                  isSelected ? "text-white" : ""
-                }`}>
-                  {format(day, "d")}
-                </span>
-                <span
-                  className={`mt-1 h-1.5 w-1.5 rounded-full ${
-                    importantLabel
-                      ? isSelected
-                        ? "bg-white"
-                        : "bg-blue-500 dark:bg-blue-400"
-                      : "opacity-0"
+          <button
+            type="button"
+            onClick={goToPrevWeek}
+            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Previous week"
+          >
+            <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          </button>
+          <div className="flex-1 grid grid-cols-7 gap-1">
+            {weekDays.map((day) => {
+              const isSelected = isSameDay(day, currentDay);
+              const isDayToday = isToday(day);
+              const dateKey = format(day, "yyyy-MM-dd");
+              const importantLabel =
+                importantDays.find((importantDay) => importantDay.date === dateKey)?.label.trim() ?? "";
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => selectDay(day)}
+                  className={`flex flex-col items-center py-2 px-1 rounded-lg transition-colors ${
+                    isSelected
+                      ? "bg-blue-500 text-white"
+                      : isDayToday
+                      ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                      : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
                   }`}
-                  aria-hidden
-                />
-              </button>
-            );
-          })}
+                >
+                  <span className="text-[10px] font-medium uppercase">
+                    {format(day, "EEE")}
+                  </span>
+                  <span className={`text-sm font-semibold mt-0.5 ${
+                    isSelected ? "text-white" : ""
+                  }`}>
+                    {format(day, "d")}
+                  </span>
+                  <span
+                    className={`mt-1 h-1.5 w-1.5 rounded-full ${
+                      importantLabel
+                        ? isSelected
+                          ? "bg-white"
+                          : "bg-blue-500 dark:bg-blue-400"
+                        : "opacity-0"
+                    }`}
+                    aria-hidden
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={goToNextWeek}
+            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Next week"
+          >
+            <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={goToNextWeek}
-          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          aria-label="Next week"
+      ) : (
+        <div
+          className={`shrink-0 border-b border-gray-200 px-3 py-3 dark:border-gray-700 ${overBackgroundClass}`}
         >
-          <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-        </button>
-      </div>
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={goToPrevMonth}
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              {format(mobileMonthStart, "MMMM yyyy")}
+            </div>
+            <button
+              type="button"
+              onClick={goToNextMonth}
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Next month"
+            >
+              <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 pb-1 text-center text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <div key={day}>{day}</div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {mobileMonthDays.map((day) => {
+              const isSelected = isSameDay(day, currentDay);
+              const isDayToday = isToday(day);
+              const inMonth = isSameMonth(day, mobileMonthStart);
+              const dateKey = format(day, "yyyy-MM-dd");
+              const importantLabel =
+                importantDays.find((importantDay) => importantDay.date === dateKey)?.label.trim() ?? "";
+              const cellEvents = getEventsForDay(events, day);
+              const cellTodos = todos.filter((todo) =>
+                isSameDay(new Date(todo.taskDate), day)
+              );
+
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => selectDay(day)}
+                  className={`min-h-[3.8rem] rounded-lg border px-1.5 py-1 text-left transition-colors ${
+                    isSelected
+                      ? "border-blue-500 bg-blue-500 text-white"
+                      : isDayToday
+                      ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                      : "border-gray-200 bg-white/75 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:bg-gray-800"
+                  } ${inMonth ? "" : "opacity-45"}`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-semibold tabular-nums">
+                      {format(day, "d")}
+                    </span>
+                    {importantLabel && (
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          isSelected ? "bg-white" : "bg-blue-500 dark:bg-blue-400"
+                        }`}
+                        aria-hidden
+                      />
+                    )}
+                  </div>
+                  <div className="mt-1 min-h-[1.5rem] space-y-0.5">
+                    {cellEvents.slice(0, 2).map((event) => (
+                      <div
+                        key={`${event.originalId}-${event.startTime}`}
+                        className={`h-1.5 rounded-full ${isSelected ? "bg-white/80" : ""}`}
+                        style={{
+                          backgroundColor: isSelected ? undefined : event.color,
+                        }}
+                      />
+                    ))}
+                    {cellEvents.length > 2 && (
+                      <div
+                        className={`text-[9px] leading-none ${
+                          isSelected
+                            ? "text-white/85"
+                            : "text-gray-400 dark:text-gray-500"
+                        }`}
+                      >
+                        +{cellEvents.length - 2}
+                      </div>
+                    )}
+                  </div>
+                  {cellTodos.length > 0 && (
+                    <div
+                      className={`mt-1 text-[9px] leading-none ${
+                        isSelected
+                          ? "text-white/85"
+                          : "text-gray-400 dark:text-gray-500"
+                      }`}
+                    >
+                      {cellTodos.length} task{cellTodos.length === 1 ? "" : "s"}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Current Day Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
             {format(currentDay, "EEEE")}
@@ -567,7 +741,31 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="inline-flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
+            <button
+              type="button"
+              onClick={() => setCalendarMode("day")}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                calendarMode === "day"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100"
+                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              }`}
+            >
+              Day
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarMode("month")}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                calendarMode === "month"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100"
+                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              }`}
+            >
+              Month
+            </button>
+          </div>
           <div className="relative inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300">
             <CalendarDays className="h-3.5 w-3.5" />
             <span>Pick</span>
