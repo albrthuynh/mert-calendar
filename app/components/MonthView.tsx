@@ -48,8 +48,6 @@ function getCalendarDays(monthStart: Date): Date[] {
 
   const days: Date[] = [];
   let currentWeekStart = start;
-  let hasSeenMonthDay = false;
-  let addedTrailingWeek = false;
 
   while (true) {
     const weekDays = Array.from({ length: 7 }, (_, i) =>
@@ -61,11 +59,6 @@ function getCalendarDays(monthStart: Date): Date[] {
 
     if (weekHasMonthDay) {
       days.push(...weekDays);
-      hasSeenMonthDay = true;
-    } else if (hasSeenMonthDay && !addedTrailingWeek) {
-      // Allow a single trailing week that spills into the next month
-      days.push(...weekDays);
-      addedTrailingWeek = true;
     } else {
       break;
     }
