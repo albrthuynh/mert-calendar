@@ -5,7 +5,10 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "Mert Calendar",
   description: "Your personal calendar with integrated to-do lists",
-  icons: { icon: "/aut_creature.webp" },
+  icons: {
+    icon: "/aut_creature.webp",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
