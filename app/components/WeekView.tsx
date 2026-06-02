@@ -807,7 +807,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       </div>
 
       {/* Calendar + optional sidebar */}
-      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white/70 dark:bg-gray-900/70">
       <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
 
       {/* Day headers + todo sections */}

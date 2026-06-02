@@ -456,7 +456,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     : undefined;
 
   const overBackgroundClass = backgroundUrl
-    ? "bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]"
+    ? "bg-white/70 dark:bg-gray-900/70"
     : "";
 
   return (
@@ -629,7 +629,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]">
+      <div className="flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
         {activeTab === "todos" ? (
           <div className="h-full flex flex-col">
             <div className="px-4 pt-3 pb-2 flex items-center justify-between">

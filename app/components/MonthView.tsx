@@ -524,7 +524,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       </div>
 
       {/* Calendar + sidebar */}
-      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/70 dark:bg-gray-900/70 backdrop-blur-[2px]">
+      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/70 dark:bg-gray-900/70">
         <div className="flex flex-col flex-1 overflow-hidden min-h-0">
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 shrink-0">
