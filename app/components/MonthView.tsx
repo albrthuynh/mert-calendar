@@ -677,7 +677,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                                   e.currentTarget.getBoundingClientRect()
                                 );
                               }}
-                              className={`w-full text-left rounded px-1.5 py-px text-[11px] truncate leading-snug hover:brightness-90 transition-all ${
+                              className={`w-full max-h-[calc(2lh+2px)] overflow-y-auto whitespace-normal break-words rounded px-1.5 py-px text-left text-[11px] leading-snug [overflow-wrap:anywhere] scrollbar-thin hover:brightness-90 transition-all ${
                                 backgroundUrl ? "text-black dark:text-white" : ""
                               }`}
                               style={{

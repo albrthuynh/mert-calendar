@@ -19,7 +19,7 @@ export function ImportantDayLabel({ children, className = "", hasBackground }: I
         className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
         aria-hidden
       />
-      <span className={`min-w-0 truncate text-center text-[14px] font-medium uppercase tracking-wide ${
+      <span className={`min-w-0 max-h-[2lh] overflow-y-auto whitespace-normal break-words text-center text-[14px] font-medium uppercase leading-tight tracking-wide [overflow-wrap:anywhere] scrollbar-thin ${
         hasBackground
           ? "text-gray-900 dark:text-white"
           : "text-gray-700 dark:text-gray-300"
