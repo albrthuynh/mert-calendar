@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type CSSProperties,
+} from "react";
 import {
   startOfDay,
   endOfDay,
@@ -917,7 +923,11 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
                       key={`${event.originalId}-${event.startTime}`}
                       type="button"
                       onClick={() => handleEventClick(event)}
-                      className="w-full text-left p-3 rounded-lg border-l-4 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow"
+                      className={`w-full text-left p-3 rounded-lg border-l-4 hover:shadow-md transition-shadow ${
+                        backgroundUrl
+                          ? "bg-[var(--event-card-bg-light)] dark:bg-[var(--event-card-bg-dark)]"
+                          : "bg-white dark:bg-gray-800"
+                      }`}
                       style={{
                         borderLeftColor: event.color,
                         backgroundColor: (() => {
@@ -927,11 +937,29 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
                             const r = parseInt(result[1], 16);
                             const g = parseInt(result[2], 16);
                             const b = parseInt(result[3], 16);
-                            return `rgba(${r}, ${g}, ${b}, 0.05)`;
+                            return backgroundUrl
+                              ? undefined
+                              : `rgba(${r}, ${g}, ${b}, 0.05)`;
                           }
-                          return undefined;
+                          return backgroundUrl ? undefined : `${event.color}0d`;
                         })(),
-                      }}
+                        "--event-card-bg-light": (() => {
+                          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(event.color);
+                          if (!result) return `${event.color}38`;
+                          const r = parseInt(result[1], 16);
+                          const g = parseInt(result[2], 16);
+                          const b = parseInt(result[3], 16);
+                          return `rgba(${r}, ${g}, ${b}, 0.22)`;
+                        })(),
+                        "--event-card-bg-dark": (() => {
+                          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(event.color);
+                          if (!result) return `${event.color}0d`;
+                          const r = parseInt(result[1], 16);
+                          const g = parseInt(result[2], 16);
+                          const b = parseInt(result[3], 16);
+                          return `rgba(${r}, ${g}, ${b}, 0.05)`;
+                        })(),
+                      } as CSSProperties}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">

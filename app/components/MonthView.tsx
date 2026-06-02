@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import {
   startOfMonth,
   endOfMonth,
@@ -671,13 +671,19 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                                 );
                               }}
                               className={`w-full max-h-[calc(2lh+2px)] overflow-y-auto whitespace-normal break-words rounded px-1.5 py-px text-left text-[11px] leading-snug [overflow-wrap:anywhere] scrollbar-thin hover:brightness-90 transition-all ${
-                                backgroundUrl ? "text-black dark:text-white" : ""
+                                backgroundUrl
+                                  ? "bg-[var(--event-bg-light)] text-black dark:bg-[var(--event-bg-dark)] dark:text-white"
+                                  : ""
                               }`}
                               style={{
-                                backgroundColor: `${event.color}20`,
+                                backgroundColor: backgroundUrl
+                                  ? undefined
+                                  : `${event.color}20`,
+                                "--event-bg-light": `${event.color}55`,
+                                "--event-bg-dark": `${event.color}20`,
                                 color: backgroundUrl ? undefined : event.color,
                                 borderLeft: `2px solid ${event.color}`,
-                              }}
+                              } as CSSProperties}
                             >
                               {event.allDay
                                 ? event.title

@@ -4,6 +4,7 @@ import { CalendarEvent } from "@/types/calendar";
 import { HOUR_HEIGHT } from "@/lib/calendarConstants";
 import { format } from "date-fns";
 import { RotateCcw } from "lucide-react";
+import type { CSSProperties } from "react";
 
 interface EventBlockProps {
   event: CalendarEvent;
@@ -61,9 +62,13 @@ export function EventBlock({
   const rgb = hexToRgb(event.color);
   const isOverlapping = stackSize > 1;
   const bgAlpha = isPreview ? 0.5 : isOverlapping ? 0.24 : 0.15;
+  const backgroundLightAlpha = isPreview ? 0.62 : isOverlapping ? 0.42 : 0.34;
   const bgColor = rgb
     ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${bgAlpha})`
     : `${event.color}${isPreview ? "80" : "25"}`;
+  const backgroundLightColor = rgb
+    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${backgroundLightAlpha})`
+    : `${event.color}${isPreview ? "9e" : "57"}`;
   const borderColor = event.color;
   const overlapShadow = rgb
     ? `inset 0 0 0 1px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5), 0 8px 18px rgba(15, 23, 42, 0.16)`
@@ -80,13 +85,19 @@ export function EventBlock({
     <div
       className={`absolute rounded-md px-1.5 py-0.5 overflow-hidden hover:brightness-95 transition-all group select-none ${
         isRecurring ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-      } ${isPreview ? "shadow-lg" : ""}`}
+      } ${isPreview ? "shadow-lg" : ""} ${
+        hasBackground
+          ? "bg-[var(--event-bg-light)] dark:bg-[var(--event-bg-dark)]"
+          : ""
+      }`}
       style={{
         top: `${top}px`,
         height: `${height}px`,
         left: "2px",
         width: "calc(100% - 4px)",
-        backgroundColor: bgColor,
+        backgroundColor: hasBackground ? undefined : bgColor,
+        "--event-bg-light": backgroundLightColor,
+        "--event-bg-dark": bgColor,
         backgroundImage: hasSameColorOverlap ? sameColorPattern : undefined,
         borderLeft: `${isOverlapping ? 4 : 3}px solid ${borderColor}`,
         boxShadow: isOverlapping ? overlapShadow : undefined,
@@ -94,7 +105,7 @@ export function EventBlock({
           ? "1px solid rgba(255, 255, 255, 0.55)"
           : undefined,
         zIndex: 10 + stackIndex,
-      }}
+      } as CSSProperties}
     >
       {/* Top resize handle - hit area for TimeGrid to detect */}
       {canResize && height > RESIZE_HANDLE_HEIGHT * 2 && (

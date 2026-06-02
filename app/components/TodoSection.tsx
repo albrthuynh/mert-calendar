@@ -80,7 +80,11 @@ export function TodoSection({
 
   return (
     <div
-      className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 w-full overflow-x-hidden"
+      className={`border-b w-full overflow-x-hidden ${
+        hasBackground
+          ? "border-white/45 bg-transparent dark:border-white/20"
+          : "border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/30"
+      }`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
