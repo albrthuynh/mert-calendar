@@ -7,6 +7,7 @@ import { CalendarEvent } from "@/types/calendar";
 import { ColorPicker } from "./ColorPicker";
 import { RecurrenceSelector } from "./RecurrenceSelector";
 import { buildEventDeleteRequest } from "@/lib/eventDelete";
+import { DesktopDateTimeInput } from "./DesktopDateTimeInput";
 
 interface EventSidebarProps {
   initialDate?: Date;
@@ -264,7 +265,11 @@ export function EventSidebar({
                   type="datetime-local"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 md:hidden"
+                />
+                <DesktopDateTimeInput
+                  value={startTime}
+                  onChange={setStartTime}
                 />
               </div>
               <div className="flex items-center gap-3">
@@ -275,7 +280,11 @@ export function EventSidebar({
                   type="datetime-local"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 md:hidden"
+                />
+                <DesktopDateTimeInput
+                  value={endTime}
+                  onChange={setEndTime}
                 />
               </div>
             </div>
