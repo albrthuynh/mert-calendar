@@ -35,6 +35,7 @@ import {
   type EventDeleteScope,
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
+import { buildEventsUrl } from "@/lib/eventFetchUrl";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 
@@ -139,7 +140,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         const startKey = format(fetchStart, "yyyy-MM-dd");
         const endKey = format(fetchEnd, "yyyy-MM-dd");
         const [eventsRes, todosRes, importantRes] = await Promise.all([
-          fetch(`/api/events?start=${start}&end=${end}`),
+          fetch(buildEventsUrl(start, end)),
           fetch(`/api/todos?start=${start}&end=${end}`),
           fetch(
             `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
@@ -202,7 +203,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const refreshEvents = useCallback(async () => {
     const start = fetchStart.toISOString();
     const end = fetchEnd.toISOString();
-    const res = await fetch(`/api/events?start=${start}&end=${end}`);
+    const res = await fetch(buildEventsUrl(start, end));
     if (res.ok) setEvents(await res.json());
   }, [fetchStart, fetchEnd]);
 
@@ -339,7 +340,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         );
         const start = fetchStart.toISOString();
         const end = fetchEnd.toISOString();
-        const eventsRes = await fetch(`/api/events?start=${start}&end=${end}`);
+        const eventsRes = await fetch(buildEventsUrl(start, end));
         if (eventsRes.ok) setEvents(await eventsRes.json());
       }
     },

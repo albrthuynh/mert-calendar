@@ -35,6 +35,7 @@ import {
   type EventDeleteScope,
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
+import { buildEventsUrl } from "@/lib/eventFetchUrl";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
@@ -160,7 +161,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         const startKey = format(weekStart, "yyyy-MM-dd");
         const endKey = format(weekEnd, "yyyy-MM-dd");
         const [eventsRes, todosRes, importantRes] = await Promise.all([
-          fetch(`/api/events?start=${start}&end=${end}`),
+          fetch(buildEventsUrl(start, end)),
           fetch(`/api/todos?start=${start}&end=${end}`),
           fetch(
             `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
@@ -382,7 +383,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const refreshEvents = useCallback(async () => {
     const start = weekStart.toISOString();
     const end = weekEnd.toISOString();
-    const res = await fetch(`/api/events?start=${start}&end=${end}`);
+    const res = await fetch(buildEventsUrl(start, end));
     if (res.ok) setEvents(await res.json());
   }, [weekStart, weekEnd]);
 
@@ -624,9 +625,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         );
         const rangeStart = weekStart.toISOString();
         const rangeEnd = weekEnd.toISOString();
-        const eventsRes = await fetch(
-          `/api/events?start=${rangeStart}&end=${rangeEnd}`
-        );
+        const eventsRes = await fetch(buildEventsUrl(rangeStart, rangeEnd));
         if (eventsRes.ok) setEvents(await eventsRes.json());
       }
     },

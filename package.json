@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "jest --runInBand",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
@@ -37,6 +39,8 @@
     "dotenv": "^17.4.1",
     "eslint": "^9.22.0",
     "eslint-config-next": "16.1.6",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"
