@@ -54,12 +54,16 @@ export function DesktopDateTimeInput({
   const periodRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (document.activeElement !== hourRef.current) {
-      setDraftHour(null);
-    }
-    if (document.activeElement !== minuteRef.current) {
-      setDraftMinute(null);
-    }
+    const resetDrafts = window.setTimeout(() => {
+      if (document.activeElement !== hourRef.current) {
+        setDraftHour(null);
+      }
+      if (document.activeElement !== minuteRef.current) {
+        setDraftMinute(null);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(resetDrafts);
   }, [value]);
 
   const commitHour = (raw: string) => {

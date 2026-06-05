@@ -35,7 +35,15 @@ import {
   type EventDeleteScope,
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
-import { buildEventsUrl } from "@/lib/eventFetchUrl";
+import {
+  eventsVersionChanged,
+  fetchEventsForRange,
+  fetchImportantDaysForRange,
+  fetchTodosForRange,
+  invalidateEventsCache,
+  invalidateImportantDaysCache,
+  invalidateTodosCache,
+} from "@/lib/calendarDataCache";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
@@ -160,16 +168,14 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       try {
         const startKey = format(weekStart, "yyyy-MM-dd");
         const endKey = format(weekEnd, "yyyy-MM-dd");
-        const [eventsRes, todosRes, importantRes] = await Promise.all([
-          fetch(buildEventsUrl(start, end)),
-          fetch(`/api/todos?start=${start}&end=${end}`),
-          fetch(
-            `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
-          ),
+        const [nextEvents, nextTodos, nextImportantDays] = await Promise.all([
+          fetchEventsForRange(start, end),
+          fetchTodosForRange(start, end),
+          fetchImportantDaysForRange(startKey, endKey),
         ]);
-        if (eventsRes.ok) setEvents(await eventsRes.json());
-        if (todosRes.ok) setTodos(await todosRes.json());
-        if (importantRes.ok) setImportantDays(await importantRes.json());
+        setEvents(nextEvents);
+        setTodos(nextTodos);
+        setImportantDays(nextImportantDays);
       } catch {
         // Silently fail; user will see empty state
       } finally {
@@ -307,9 +313,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
               : e
           )
         );
+      } else {
+        invalidateEventsCache();
       }
     },
-    [weekStart, weekEnd]
+    []
   );
 
   const handleEventMove = useCallback(
@@ -375,24 +383,39 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
               : e
           )
         );
+      } else {
+        invalidateEventsCache();
       }
     },
-    [weekStart, weekEnd]
+    []
   );
 
-  const refreshEvents = useCallback(async () => {
+  const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
     const start = weekStart.toISOString();
     const end = weekEnd.toISOString();
-    const res = await fetch(buildEventsUrl(start, end));
-    if (res.ok) setEvents(await res.json());
+    setEvents(await fetchEventsForRange(start, end, options));
   }, [weekStart, weekEnd]);
 
   useEffect(() => {
-    const interval = window.setInterval(refreshEvents, 10000);
-    window.addEventListener("mert-calendar:events-updated", refreshEvents);
+    const checkForEventChanges = async () => {
+      try {
+        if (await eventsVersionChanged()) {
+          invalidateEventsCache();
+          await refreshEvents({ force: true });
+        }
+      } catch {
+        // Keep the current calendar visible if a background freshness check fails.
+      }
+    };
+    const handleEventsUpdated = () => {
+      invalidateEventsCache();
+      void refreshEvents({ force: true });
+    };
+    const interval = window.setInterval(checkForEventChanges, 10000);
+    window.addEventListener("mert-calendar:events-updated", handleEventsUpdated);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("mert-calendar:events-updated", refreshEvents);
+      window.removeEventListener("mert-calendar:events-updated", handleEventsUpdated);
     };
   }, [refreshEvents]);
 
@@ -409,7 +432,8 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         throw new Error(body?.error ?? "Could not copy event.");
       }
 
-      await refreshEvents();
+      invalidateEventsCache();
+      await refreshEvents({ force: true });
     },
     [refreshEvents]
   );
@@ -445,7 +469,8 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         throw new Error(message);
       }
       setRecurringMovePending(null);
-      await refreshEvents();
+      invalidateEventsCache();
+      await refreshEvents({ force: true });
     } catch (e) {
       setRecurringMoveError(
         e instanceof Error ? e.message : "Something went wrong"
@@ -496,7 +521,8 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         throw new Error(message);
       }
       setRecurringMovePending(null);
-      await refreshEvents();
+      invalidateEventsCache();
+      await refreshEvents({ force: true });
     } catch (e) {
       setRecurringMoveError(
         e instanceof Error ? e.message : "Something went wrong"
@@ -508,7 +534,8 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
 
   const handleEventSaved = useCallback(
     async (_saved: CalendarEvent) => {
-      await refreshEvents();
+      invalidateEventsCache();
+      await refreshEvents({ force: true });
       setShowEventModal(false);
       setShowEventSidebar(false);
       setEditingEvent(undefined);
@@ -531,6 +558,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       buildEventDeleteRequest(popoverEvent)
     );
     if (!res.ok) return;
+    invalidateEventsCache();
     setEvents((prev) => removeDeletedEventFromList(prev, popoverEvent));
     setPopoverEvent(null);
   }, [popoverEvent]);
@@ -552,6 +580,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         setEvents((prev) =>
           removeDeletedEventFromList(prev, recurringDeletePending, scope)
         );
+        invalidateEventsCache();
         setRecurringDeletePending(null);
       } catch (error) {
         setRecurringDeleteError(
@@ -575,7 +604,8 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       setCreateDate(undefined);
       return;
     }
-    await refreshEvents();
+    invalidateEventsCache();
+    await refreshEvents({ force: true });
     setShowEventSidebar(false);
     setEditingEvent(undefined);
     setCreateDate(undefined);
@@ -623,17 +653,16 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
             ? { ...prev, startTime: newStart.toISOString(), endTime: newEnd.toISOString() }
             : prev
         );
-        const rangeStart = weekStart.toISOString();
-        const rangeEnd = weekEnd.toISOString();
-        const eventsRes = await fetch(buildEventsUrl(rangeStart, rangeEnd));
-        if (eventsRes.ok) setEvents(await eventsRes.json());
+        invalidateEventsCache();
+        await refreshEvents({ force: true });
       }
     },
-    [weekStart, weekEnd]
+    [refreshEvents]
   );
 
   // ── Todo handlers ──────────────────────────────────────────
   const handleTodoAdd = useCallback((todo: Todo) => {
+    invalidateTodosCache();
     setTodos((prev) => [...prev, todo]);
   }, []);
 
@@ -665,11 +694,13 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ completed }),
     });
+    invalidateTodosCache();
   }, []);
 
   const handleTodoDelete = useCallback(async (id: string) => {
     setTodos((prev) => prev.filter((t) => t.id !== id));
     await fetch(`/api/todos/${id}`, { method: "DELETE" });
+    invalidateTodosCache();
   }, []);
 
   const handleTodoEdit = useCallback(async (id: string, title: string) => {
@@ -679,9 +710,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
     });
+    invalidateTodosCache();
   }, []);
 
   const handleTodoUpdate = useCallback((updated: Todo) => {
+    invalidateTodosCache();
     setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   }, []);
 
@@ -695,6 +728,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ taskDate: newDateIso }),
     });
+    invalidateTodosCache();
   }, []);
 
   const handleImportantDaySave = useCallback(
@@ -706,6 +740,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           method: "DELETE",
         });
         if (res.ok) {
+          invalidateImportantDaysCache();
           setImportantDays((prev) => prev.filter((d) => d.id !== existing.id));
         }
         return;
@@ -720,6 +755,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       });
       if (res.ok) {
         const row: ImportantDay = await res.json();
+        invalidateImportantDaysCache();
         setImportantDays((prev) => {
           const rest = prev.filter((d) => d.date !== payload.dateKey);
           return [...rest, row].sort((a, b) => a.date.localeCompare(b.date));

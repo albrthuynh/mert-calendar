@@ -769,6 +769,11 @@ export async function syncGoogleCalendarForUser(
   userId: string,
   options: { force?: boolean } = {}
 ) {
+  const cooldownKey = `google-calendar-sync:${userId}`;
+  if (!options.force && readInMemoryCache<boolean>(cooldownKey)) {
+    return { changed: false, skipped: true };
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -786,12 +791,10 @@ export async function syncGoogleCalendarForUser(
   }
   if (!options.force && user.googleCalendarLastSyncedAt) {
     const elapsed = Date.now() - user.googleCalendarLastSyncedAt.getTime();
-    if (elapsed < AUTO_SYNC_COOLDOWN_MS) return { changed: false, skipped: true };
-  }
-
-  const cooldownKey = `google-calendar-sync:${userId}`;
-  if (!options.force && readInMemoryCache<boolean>(cooldownKey)) {
-    return { changed: false, skipped: true };
+    if (elapsed < AUTO_SYNC_COOLDOWN_MS) {
+      writeInMemoryCache(cooldownKey, true, AUTO_SYNC_COOLDOWN_MS - elapsed);
+      return { changed: false, skipped: true };
+    }
   }
   writeInMemoryCache(cooldownKey, true, AUTO_SYNC_COOLDOWN_MS);
 

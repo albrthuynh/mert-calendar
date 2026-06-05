@@ -127,6 +127,11 @@ model Event {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, googleCalendarId, googleEventId])
+  @@index([userId, parentEventId, deleted])
+  @@index([userId, startTime])
+  @@index([userId, endTime])
+  @@index([userId, recurrenceEndDate])
+  @@index([userId, updatedAt])
 }
 
 model Todo {
@@ -141,4 +146,6 @@ model Todo {
   updatedAt   DateTime  @updatedAt
   taskDate    DateTime  @default(now())
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskDate])
 }

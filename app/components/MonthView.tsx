@@ -35,7 +35,15 @@ import {
   type EventDeleteScope,
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
-import { buildEventsUrl } from "@/lib/eventFetchUrl";
+import {
+  eventsVersionChanged,
+  fetchEventsForRange,
+  fetchImportantDaysForRange,
+  fetchTodosForRange,
+  invalidateEventsCache,
+  invalidateImportantDaysCache,
+  invalidateTodosCache,
+} from "@/lib/calendarDataCache";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 
@@ -139,16 +147,14 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       try {
         const startKey = format(fetchStart, "yyyy-MM-dd");
         const endKey = format(fetchEnd, "yyyy-MM-dd");
-        const [eventsRes, todosRes, importantRes] = await Promise.all([
-          fetch(buildEventsUrl(start, end)),
-          fetch(`/api/todos?start=${start}&end=${end}`),
-          fetch(
-            `/api/important-days?startKey=${encodeURIComponent(startKey)}&endKey=${encodeURIComponent(endKey)}`
-          ),
+        const [nextEvents, nextTodos, nextImportantDays] = await Promise.all([
+          fetchEventsForRange(start, end),
+          fetchTodosForRange(start, end),
+          fetchImportantDaysForRange(startKey, endKey),
         ]);
-        if (eventsRes.ok) setEvents(await eventsRes.json());
-        if (todosRes.ok) setTodos(await todosRes.json());
-        if (importantRes.ok) setImportantDays(await importantRes.json());
+        setEvents(nextEvents);
+        setTodos(nextTodos);
+        setImportantDays(nextImportantDays);
       } catch {
         /* empty */
       } finally {
@@ -200,19 +206,32 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     [popoverEvent]
   );
 
-  const refreshEvents = useCallback(async () => {
+  const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
     const start = fetchStart.toISOString();
     const end = fetchEnd.toISOString();
-    const res = await fetch(buildEventsUrl(start, end));
-    if (res.ok) setEvents(await res.json());
+    setEvents(await fetchEventsForRange(start, end, options));
   }, [fetchStart, fetchEnd]);
 
   useEffect(() => {
-    const interval = window.setInterval(refreshEvents, 10000);
-    window.addEventListener("mert-calendar:events-updated", refreshEvents);
+    const checkForEventChanges = async () => {
+      try {
+        if (await eventsVersionChanged()) {
+          invalidateEventsCache();
+          await refreshEvents({ force: true });
+        }
+      } catch {
+        // Keep the current calendar visible if a background freshness check fails.
+      }
+    };
+    const handleEventsUpdated = () => {
+      invalidateEventsCache();
+      void refreshEvents({ force: true });
+    };
+    const interval = window.setInterval(checkForEventChanges, 10000);
+    window.addEventListener("mert-calendar:events-updated", handleEventsUpdated);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("mert-calendar:events-updated", refreshEvents);
+      window.removeEventListener("mert-calendar:events-updated", handleEventsUpdated);
     };
   }, [refreshEvents]);
 
@@ -229,14 +248,16 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         throw new Error(body?.error ?? "Could not copy event.");
       }
 
-      await refreshEvents();
+      invalidateEventsCache();
+      await refreshEvents({ force: true });
     },
     [refreshEvents]
   );
 
   const handleEventSaved = useCallback(
     async (_saved: CalendarEvent) => {
-      await refreshEvents();
+      invalidateEventsCache();
+      await refreshEvents({ force: true });
       setShowEventModal(false);
       setEditingEvent(undefined);
       setCreateDate(undefined);
@@ -259,6 +280,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       buildEventDeleteRequest(popoverEvent)
     );
     if (!res.ok) return;
+    invalidateEventsCache();
     setEvents((prev) => removeDeletedEventFromList(prev, popoverEvent));
     setPopoverEvent(null);
   }, [popoverEvent]);
@@ -280,6 +302,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         setEvents((prev) =>
           removeDeletedEventFromList(prev, recurringDeletePending, scope)
         );
+        invalidateEventsCache();
         setRecurringDeletePending(null);
       } catch (error) {
         setRecurringDeleteError(
@@ -338,18 +361,17 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
               }
             : prev
         );
-        const start = fetchStart.toISOString();
-        const end = fetchEnd.toISOString();
-        const eventsRes = await fetch(buildEventsUrl(start, end));
-        if (eventsRes.ok) setEvents(await eventsRes.json());
+        invalidateEventsCache();
+        await refreshEvents({ force: true });
       }
     },
-    [fetchStart, fetchEnd]
+    [refreshEvents]
   );
 
   // ── Todo handlers ──────────────────────────────────────────
 
   const handleTodoAdd = useCallback((todo: Todo) => {
+    invalidateTodosCache();
     setTodos((prev) => [...prev, todo]);
   }, []);
 
@@ -382,6 +404,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ completed }),
       });
+      invalidateTodosCache();
     },
     []
   );
@@ -389,6 +412,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const handleTodoDelete = useCallback(async (id: string) => {
     setTodos((prev) => prev.filter((t) => t.id !== id));
     await fetch(`/api/todos/${id}`, { method: "DELETE" });
+    invalidateTodosCache();
   }, []);
 
   const handleTodoEdit = useCallback(async (id: string, title: string) => {
@@ -400,9 +424,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
     });
+    invalidateTodosCache();
   }, []);
 
   const handleTodoUpdate = useCallback((updated: Todo) => {
+    invalidateTodosCache();
     setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   }, []);
 
@@ -415,6 +441,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
           method: "DELETE",
         });
         if (res.ok) {
+          invalidateImportantDaysCache();
           setImportantDays((prev) => prev.filter((d) => d.id !== existing.id));
         }
         return;
@@ -429,6 +456,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       });
       if (res.ok) {
         const row: ImportantDay = await res.json();
+        invalidateImportantDaysCache();
         setImportantDays((prev) => {
           const rest = prev.filter((d) => d.date !== payload.dateKey);
           return [...rest, row].sort((a, b) => a.date.localeCompare(b.date));
