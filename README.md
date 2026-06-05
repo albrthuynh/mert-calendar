@@ -40,9 +40,18 @@ If `.env.example` does not exist yet, create `.env.local` manually and add:
 
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DB_NAME"
+AUTH_SECRET="generate_with_npx_auth_secret"
 AUTH_GOOGLE_ID="your_google_oauth_client_id"
 AUTH_GOOGLE_SECRET="your_google_oauth_client_secret"
 ```
+
+Generate `AUTH_SECRET` with:
+
+```bash
+npx auth secret
+```
+
+Use the same `AUTH_SECRET` value in production. Changing it invalidates existing login cookies.
 
 3. Generate Prisma client and sync your schema:
 

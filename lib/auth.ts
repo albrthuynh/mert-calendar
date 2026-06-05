@@ -6,6 +6,7 @@ import type { Account, User } from "next-auth";
 import { ensureGoogleCalendarWatch } from "@/lib/googleCalendar";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const SESSION_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
 
 function hasGoogleCalendarScope(scope: string | null | undefined) {
   return !!scope?.split(/\s+/).includes(GOOGLE_CALENDAR_SCOPE);
@@ -52,7 +53,11 @@ async function persistGoogleCalendarConsent(
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: SESSION_MAX_AGE_SECONDS,
+    updateAge: 24 * 60 * 60,
+  },
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, account }) {
