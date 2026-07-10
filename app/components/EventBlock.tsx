@@ -11,6 +11,8 @@ interface EventBlockProps {
   dayStart: Date;
   stackIndex: number;
   stackSize: number;
+  laneIndex: number;
+  laneCount: number;
   hasSameColorOverlap: boolean;
   /** Override displayed position/size during drag preview */
   overrideStart?: Date;
@@ -38,6 +40,8 @@ export function EventBlock({
   dayStart,
   stackIndex,
   stackSize,
+  laneIndex,
+  laneCount,
   hasSameColorOverlap,
   overrideStart,
   overrideEnd,
@@ -79,7 +83,13 @@ export function EventBlock({
 
   const isShort = height < 40;
   const isRecurring = event.isRecurringInstance || Boolean(event.recurrenceRule);
-  const canResize = !isRecurring;
+  const canResize = !isRecurring && !event.readOnly;
+  const leftPercent = (100 / laneCount) * laneIndex;
+  const rightPercent = 100 - (100 / laneCount) * (laneIndex + 1);
+  const laneLeft = `calc(${leftPercent}% + ${laneIndex === 0 ? 2 : 1}px)`;
+  const laneRight = `calc(${rightPercent}% + ${
+    laneIndex === laneCount - 1 ? 2 : 1
+  }px)`;
 
   return (
     <div
@@ -93,8 +103,8 @@ export function EventBlock({
       style={{
         top: `${top}px`,
         height: `${height}px`,
-        left: "2px",
-        width: "calc(100% - 4px)",
+        left: laneLeft,
+        right: laneRight,
         backgroundColor: hasBackground ? undefined : bgColor,
         "--event-bg-light": backgroundLightColor,
         "--event-bg-dark": bgColor,

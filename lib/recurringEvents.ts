@@ -1,4 +1,5 @@
 import { RRule } from "rrule";
+import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
 
 export type RecurringEventResponseItem = {
   id: string;
@@ -16,6 +17,8 @@ export type RecurringEventResponseItem = {
   isRecurringInstance: boolean;
   originalId: string;
   instanceStartTime: string | null;
+  /** True for events imported from a read-only Google calendar. */
+  readOnly: boolean;
 };
 
 export type RecurringEventOverride = {
@@ -46,6 +49,7 @@ export type RecurringEventSeries = {
   recurrenceEndDate: Date | null;
   reminderMinutes: number | null;
   reminderDisabled: boolean;
+  googleCalendarId?: string | null;
   childEvents: RecurringEventOverride[];
 };
 
@@ -201,6 +205,8 @@ export function expandRecurringEventForRange(
   const recurrenceRule = event.recurrenceRule;
   if (!recurrenceRule) return [];
 
+  const readOnly = isReadOnlyGoogleCalendarId(event.googleCalendarId);
+
   const durationMs = event.endTime.getTime() - event.startTime.getTime();
   const recurrenceLimit = event.recurrenceEndDate
     ? recurrenceEndToWallDayEnd(event.recurrenceEndDate)
@@ -260,6 +266,7 @@ export function expandRecurringEventForRange(
         isRecurringInstance: true,
         originalId: event.id,
         instanceStartTime: occStartIso,
+        readOnly,
       });
       continue;
     }
@@ -280,6 +287,7 @@ export function expandRecurringEventForRange(
       isRecurringInstance: true,
       originalId: event.id,
       instanceStartTime: occStartIso,
+      readOnly,
     });
   }
 

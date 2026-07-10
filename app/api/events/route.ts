@@ -16,6 +16,7 @@ import {
   normalizeTimeZone,
   type RecurringEventResponseItem,
 } from "@/lib/recurringEvents";
+import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
 
 const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
 
@@ -68,6 +69,7 @@ async function loadEventsForRange(
       isRecurringInstance: false,
       originalId: event.id,
       instanceStartTime: null,
+      readOnly: isReadOnlyGoogleCalendarId(event.googleCalendarId),
     });
   }
 
@@ -89,6 +91,7 @@ async function loadEventsForRange(
         isRecurringInstance: false,
         originalId: event.id,
         instanceStartTime: null,
+        readOnly: isReadOnlyGoogleCalendarId(event.googleCalendarId),
       });
     }
   }

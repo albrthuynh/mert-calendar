@@ -100,4 +100,30 @@ describe("recurring event expansion", () => {
     );
     expect(occurrences).toHaveLength(3);
   });
+
+  it("marks occurrences from a non-primary Google calendar as read-only", () => {
+    const occurrences = expandRecurringEventForRange(
+      baseSeries({ googleCalendarId: "shared-calendar@group.calendar.google.com" }),
+      new Date("2025-11-01T05:00:00.000Z"),
+      new Date("2025-11-30T05:59:59.999Z"),
+      timeZone
+    );
+
+    expect(occurrences.length).toBeGreaterThan(0);
+    expect(occurrences.every((event) => event.readOnly)).toBe(true);
+  });
+
+  it("keeps occurrences from the primary Google calendar editable", () => {
+    for (const googleCalendarId of [null, "primary"]) {
+      const occurrences = expandRecurringEventForRange(
+        baseSeries({ googleCalendarId }),
+        new Date("2025-11-01T05:00:00.000Z"),
+        new Date("2025-11-30T05:59:59.999Z"),
+        timeZone
+      );
+
+      expect(occurrences.length).toBeGreaterThan(0);
+      expect(occurrences.every((event) => !event.readOnly)).toBe(true);
+    }
+  });
 });

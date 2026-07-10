@@ -17,7 +17,7 @@ import { playNotificationSound, normalizeSoundId } from "@/lib/notificationSound
 import type { NotificationPreferences } from "../context/NotificationPreferencesContext";
 
 const GOOGLE_CALENDAR_SCOPE =
-  "openid email profile https://www.googleapis.com/auth/calendar.events";
+  "openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 
 const REMINDER_OPTIONS_MINUTES = [0, 5, 10, 15, 30, 60] as const;
 const SOUND_OPTIONS = [
@@ -31,10 +31,20 @@ type GoogleCalendarStatus = {
   connected: boolean;
   enabled: boolean;
   hasCalendarScope: boolean;
+  hasCalendarListScope: boolean;
   lastSyncedAt: string | null;
   webhookConfigured: boolean;
   watchActive: boolean;
   watchExpiresAt: string | null;
+};
+
+type GoogleCalendarOption = {
+  id: string;
+  summary: string;
+  primary: boolean;
+  color: string | null;
+  accessRole: string | null;
+  selected: boolean;
 };
 
 type SettingsTab = "appearance" | "notifications" | "sync" | "account";
@@ -117,6 +127,19 @@ export function SettingsModal({
   const [googleSyncing, setGoogleSyncing] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
 
+  const [googleCalendars, setGoogleCalendars] = useState<
+    GoogleCalendarOption[] | null
+  >(null);
+  const [calendarListScopeMissing, setCalendarListScopeMissing] =
+    useState(false);
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [calendarsLoading, setCalendarsLoading] = useState(false);
+  const [calendarsSaving, setCalendarsSaving] = useState(false);
+  const [calendarsError, setCalendarsError] = useState<string | null>(null);
+  const [calendarsSaved, setCalendarsSaved] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -158,11 +181,46 @@ export function SettingsModal({
     };
   }, []);
 
+  const loadGoogleCalendars = async () => {
+    setCalendarsLoading(true);
+    setCalendarsError(null);
+    try {
+      const res = await fetch("/api/google-calendar/calendars");
+      if (!res.ok) {
+        setGoogleCalendars(null);
+        return;
+      }
+      const data = await res.json();
+      const calendars: GoogleCalendarOption[] = data.calendars ?? [];
+      setGoogleCalendars(calendars);
+      setCalendarListScopeMissing(!data.hasCalendarListScope);
+      setSelectedCalendarIds(
+        new Set(
+          calendars
+            .filter((calendar) => calendar.selected && !calendar.primary)
+            .map((calendar) => calendar.id)
+        )
+      );
+    } catch {
+      setGoogleCalendars(null);
+    } finally {
+      setCalendarsLoading(false);
+    }
+  };
+
   const loadGoogleStatus = async () => {
     setGoogleLoading(true);
     try {
       const res = await fetch("/api/google-calendar/status");
-      setGoogleStatus(res.ok ? await res.json() : null);
+      const status: GoogleCalendarStatus | null = res.ok
+        ? await res.json()
+        : null;
+      setGoogleStatus(status);
+      if (status?.connected && status.hasCalendarScope) {
+        loadGoogleCalendars();
+      } else {
+        setGoogleCalendars(null);
+      }
     } catch {
       setGoogleStatus(null);
     } finally {
@@ -384,6 +442,68 @@ export function SettingsModal({
       setGoogleSyncing(false);
     }
   };
+
+  const toggleCalendarSelection = (calendarId: string) => {
+    setCalendarsSaved(false);
+    setSelectedCalendarIds((current) => {
+      const next = new Set(current);
+      if (next.has(calendarId)) {
+        next.delete(calendarId);
+      } else {
+        next.add(calendarId);
+      }
+      return next;
+    });
+  };
+
+  const handleSaveCalendars = async () => {
+    setCalendarsSaving(true);
+    setCalendarsError(null);
+    setCalendarsSaved(false);
+    try {
+      const res = await fetch("/api/google-calendar/calendars", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calendarIds: [...selectedCalendarIds] }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Failed to update calendars.");
+      }
+      setCalendarsSaved(true);
+      await loadGoogleCalendars();
+      window.dispatchEvent(new Event("mert-calendar:events-updated"));
+    } catch (error) {
+      setCalendarsError(
+        error instanceof Error ? error.message : "Failed to update calendars."
+      );
+    } finally {
+      setCalendarsSaving(false);
+    }
+  };
+
+  const handleReconnectGoogle = async () => {
+    await signIn(
+      "google",
+      { callbackUrl: "/calendar" },
+      {
+        access_type: "offline",
+        prompt: "consent",
+        scope: GOOGLE_CALENDAR_SCOPE,
+      }
+    );
+  };
+
+  const extraCalendarOptions =
+    googleCalendars?.filter((calendar) => !calendar.primary) ?? [];
+  const calendarSelectionDirty =
+    googleCalendars !== null &&
+    (extraCalendarOptions.some(
+      (calendar) => calendar.selected !== selectedCalendarIds.has(calendar.id)
+    ) ||
+      [...selectedCalendarIds].some(
+        (id) => !extraCalendarOptions.some((calendar) => calendar.id === id)
+      ));
 
   if (!mounted) return null;
 
@@ -848,6 +968,107 @@ export function SettingsModal({
                     </p>
                   )}
                 </section>
+
+                {googleStatus?.connected && googleStatus.hasCalendarScope && (
+                  <section className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                      Other calendars
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Show events from your other Google calendars. These are
+                      read-only: you can view them here, but not edit them.
+                    </p>
+
+                    {calendarListScopeMissing ? (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Listing your calendars needs an extra Google
+                          permission. Reconnect to grant it.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleReconnectGoogle}
+                          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                        >
+                          Reconnect Google
+                        </button>
+                      </div>
+                    ) : calendarsLoading ? (
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Loading calendars...
+                      </p>
+                    ) : !googleCalendars ? (
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Could not load your calendars. Try refreshing the
+                        status below.
+                      </p>
+                    ) : extraCalendarOptions.length === 0 ? (
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        No other calendars found on this Google account.
+                      </p>
+                    ) : (
+                      <>
+                        <ul className="mt-3 space-y-1.5">
+                          {extraCalendarOptions.map((calendar) => (
+                            <li key={calendar.id}>
+                              <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1 hover:bg-gray-50 dark:hover:bg-gray-800/60">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedCalendarIds.has(calendar.id)}
+                                  onChange={() =>
+                                    toggleCalendarSelection(calendar.id)
+                                  }
+                                  className="h-4 w-4"
+                                />
+                                <span
+                                  className="h-3 w-3 shrink-0 rounded-full"
+                                  style={{
+                                    backgroundColor:
+                                      calendar.color ?? "#9ca3af",
+                                  }}
+                                />
+                                <span className="min-w-0 truncate text-sm text-gray-800 dark:text-gray-200">
+                                  {calendar.summary}
+                                </span>
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="mt-3 flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={handleSaveCalendars}
+                            disabled={calendarsSaving || !calendarSelectionDirty}
+                            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {calendarsSaving && (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            )}
+                            {calendarsSaving
+                              ? "Saving and syncing..."
+                              : "Save calendars"}
+                          </button>
+                          {calendarsSaved && !calendarsError && (
+                            <span className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-300">
+                              <Check className="h-3.5 w-3.5" />
+                              Saved
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {calendarsError && (
+                      <p
+                        className="mt-3 text-sm text-red-600 dark:text-red-400"
+                        role="alert"
+                      >
+                        {calendarsError}
+                      </p>
+                    )}
+                  </section>
+                )}
 
                 <button
                   type="button"

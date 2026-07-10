@@ -3,8 +3,17 @@ import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/li
 import { normalizeEventLink } from "@/lib/eventLink";
 import { randomBytes, randomUUID } from "crypto";
 
+import {
+  GOOGLE_PRIMARY_CALENDAR_ID,
+  isReadOnlyGoogleCalendarId,
+} from "@/lib/googleCalendarReadOnly";
+
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-const GOOGLE_CALENDAR_ID = "primary";
+const GOOGLE_CALENDAR_LIST_SCOPE =
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
+
+export { GOOGLE_PRIMARY_CALENDAR_ID, isReadOnlyGoogleCalendarId };
+
 const GOOGLE_API_BASE = "https://www.googleapis.com/calendar/v3";
 const AUTO_SYNC_COOLDOWN_MS = 60 * 1000;
 const WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -74,10 +83,35 @@ type GoogleChannelResponse = {
   expiration?: string;
 };
 
+type GoogleCalendarListEntry = {
+  id: string;
+  summary?: string;
+  summaryOverride?: string;
+  primary?: boolean;
+  backgroundColor?: string;
+  accessRole?: string;
+  deleted?: boolean;
+};
+
+type GoogleCalendarListResponse = {
+  items?: GoogleCalendarListEntry[];
+  nextPageToken?: string;
+};
+
+export type AvailableGoogleCalendar = {
+  id: string;
+  summary: string;
+  primary: boolean;
+  color: string | null;
+  accessRole: string | null;
+  selected: boolean;
+};
+
 export type GoogleCalendarStatus = {
   connected: boolean;
   enabled: boolean;
   hasCalendarScope: boolean;
+  hasCalendarListScope: boolean;
   lastSyncedAt: string | null;
   webhookConfigured: boolean;
   watchActive: boolean;
@@ -97,6 +131,18 @@ class GoogleCalendarSyncError extends Error {
 function hasCalendarScope(scope: string | null | undefined) {
   if (!scope) return false;
   return scope.split(/\s+/).includes(GOOGLE_CALENDAR_SCOPE);
+}
+
+function hasCalendarListScope(scope: string | null | undefined) {
+  if (!scope) return false;
+  const scopes = scope.split(/\s+/);
+  // Broader calendar scopes also grant calendar-list access.
+  return (
+    scopes.includes(GOOGLE_CALENDAR_LIST_SCOPE) ||
+    scopes.includes("https://www.googleapis.com/auth/calendar.calendarlist") ||
+    scopes.includes("https://www.googleapis.com/auth/calendar.readonly") ||
+    scopes.includes("https://www.googleapis.com/auth/calendar")
+  );
 }
 
 async function getGoogleAccount(userId: string): Promise<GoogleAccount | null> {
@@ -127,7 +173,7 @@ export async function getGoogleCalendarStatus(
     prisma.googleCalendarChannel.findFirst({
       where: {
         userId,
-        calendarId: GOOGLE_CALENDAR_ID,
+        calendarId: GOOGLE_PRIMARY_CALENDAR_ID,
         active: true,
         OR: [{ expiration: null }, { expiration: { gt: new Date() } }],
       },
@@ -140,6 +186,7 @@ export async function getGoogleCalendarStatus(
     connected: !!account?.access_token || !!account?.refresh_token,
     enabled: user?.googleCalendarSyncEnabled ?? false,
     hasCalendarScope: hasCalendarScope(account?.scope),
+    hasCalendarListScope: hasCalendarListScope(account?.scope),
     lastSyncedAt: user?.googleCalendarLastSyncedAt?.toISOString() ?? null,
     webhookConfigured: !!getGoogleCalendarWebhookAddress(false),
     watchActive: !!activeChannel,
@@ -304,6 +351,7 @@ async function stopGoogleCalendarChannel(
 
 export async function ensureGoogleCalendarWatch(
   userId: string,
+  calendarId: string = GOOGLE_PRIMARY_CALENDAR_ID,
   options: { force?: boolean } = {}
 ) {
   const address = getGoogleCalendarWebhookAddress();
@@ -311,7 +359,7 @@ export async function ensureGoogleCalendarWatch(
   const existing = await prisma.googleCalendarChannel.findFirst({
     where: {
       userId,
-      calendarId: GOOGLE_CALENDAR_ID,
+      calendarId,
       active: true,
     },
     orderBy: { expiration: "desc" },
@@ -338,7 +386,7 @@ export async function ensureGoogleCalendarWatch(
   const requestedExpiration = new Date(now.getTime() + WATCH_DURATION_MS);
   const googleChannel = await googleCalendarFetch<GoogleChannelResponse>(
     userId,
-    `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events/watch`,
+    `/calendars/${encodeURIComponent(calendarId)}/events/watch`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -357,7 +405,7 @@ export async function ensureGoogleCalendarWatch(
   await prisma.googleCalendarChannel.updateMany({
     where: {
       userId,
-      calendarId: GOOGLE_CALENDAR_ID,
+      calendarId,
       active: true,
       channelId: { not: channelId },
     },
@@ -367,7 +415,7 @@ export async function ensureGoogleCalendarWatch(
   return prisma.googleCalendarChannel.create({
     data: {
       userId,
-      calendarId: GOOGLE_CALENDAR_ID,
+      calendarId,
       channelId,
       resourceId: googleChannel.resourceId ?? null,
       token,
@@ -375,6 +423,30 @@ export async function ensureGoogleCalendarWatch(
       active: true,
     },
   });
+}
+
+/**
+ * Ensure watch channels for the primary calendar and every read-only source.
+ * Primary failures propagate (callers surface them); source failures are
+ * logged so one broken shared calendar cannot break instant sync entirely.
+ */
+export async function ensureGoogleCalendarWatches(userId: string) {
+  const primary = await ensureGoogleCalendarWatch(userId);
+
+  const sources = await prisma.googleCalendarSource.findMany({
+    where: { userId },
+    select: { calendarId: true },
+  });
+  for (const source of sources) {
+    await ensureGoogleCalendarWatch(userId, source.calendarId).catch((error) => {
+      console.error(
+        `Google Calendar watch setup failed for ${source.calendarId}`,
+        error
+      );
+    });
+  }
+
+  return primary;
 }
 
 export async function handleGoogleCalendarWebhook(headers: Headers) {
@@ -395,6 +467,7 @@ export async function handleGoogleCalendarWebhook(headers: Headers) {
     select: {
       id: true,
       userId: true,
+      calendarId: true,
       expiration: true,
     },
   });
@@ -416,9 +489,11 @@ export async function handleGoogleCalendarWebhook(headers: Headers) {
   }
 
   await syncGoogleCalendarForUser(channel.userId, { force: true });
-  await ensureGoogleCalendarWatch(channel.userId).catch((error) => {
-    console.error("Google Calendar watch renewal failed", error);
-  });
+  await ensureGoogleCalendarWatch(channel.userId, channel.calendarId).catch(
+    (error) => {
+      console.error("Google Calendar watch renewal failed", error);
+    }
+  );
 
   return { synced: true, resourceState };
 }
@@ -445,7 +520,7 @@ export async function renewGoogleCalendarWatches() {
 
   for (const user of users) {
     try {
-      await ensureGoogleCalendarWatch(user.id);
+      await ensureGoogleCalendarWatches(user.id);
       result.ensured += 1;
     } catch (error) {
       result.failed += 1;
@@ -583,11 +658,15 @@ function localEventToGoogleBody(event: {
   return body;
 }
 
-async function deleteMappedGoogleEvent(userId: string, googleEvent: GoogleCalendarEvent) {
+async function deleteMappedGoogleEvent(
+  userId: string,
+  calendarId: string,
+  googleEvent: GoogleCalendarEvent
+) {
   const existing = await prisma.event.findFirst({
     where: {
       userId,
-      googleCalendarId: GOOGLE_CALENDAR_ID,
+      googleCalendarId: calendarId,
       googleEventId: googleEvent.id,
     },
     select: { id: true, parentEventId: true },
@@ -605,7 +684,7 @@ async function deleteMappedGoogleEvent(userId: string, googleEvent: GoogleCalend
     const parent = await prisma.event.findFirst({
       where: {
         userId,
-        googleCalendarId: GOOGLE_CALENDAR_ID,
+        googleCalendarId: calendarId,
         googleEventId: googleEvent.recurringEventId,
       },
       select: { id: true, title: true, description: true, link: true, startTime: true, endTime: true, color: true, allDay: true },
@@ -618,7 +697,7 @@ async function deleteMappedGoogleEvent(userId: string, googleEvent: GoogleCalend
         where: { instanceId },
         update: {
           deleted: true,
-          googleCalendarId: GOOGLE_CALENDAR_ID,
+          googleCalendarId: calendarId,
           googleEventId: googleEvent.id,
           googleEtag: googleEvent.etag ?? null,
           googleUpdatedAt: googleEventUpdateDate(googleEvent),
@@ -636,7 +715,7 @@ async function deleteMappedGoogleEvent(userId: string, googleEvent: GoogleCalend
           color: parent.color,
           allDay: parent.allDay,
           deleted: true,
-          googleCalendarId: GOOGLE_CALENDAR_ID,
+          googleCalendarId: calendarId,
           googleEventId: googleEvent.id,
           googleEtag: googleEvent.etag ?? null,
           googleUpdatedAt: googleEventUpdateDate(googleEvent),
@@ -650,16 +729,25 @@ async function deleteMappedGoogleEvent(userId: string, googleEvent: GoogleCalend
   return false;
 }
 
-async function upsertGoogleEvent(userId: string, googleEvent: GoogleCalendarEvent) {
+async function upsertGoogleEvent(
+  userId: string,
+  calendarId: string,
+  googleEvent: GoogleCalendarEvent,
+  defaultColor?: string | null
+) {
   const startTime = googleDateToDate(googleEvent.start);
   const endTime = googleDateToDate(googleEvent.end);
   if (!startTime || !endTime) return false;
 
-  const linkedLocalId = googleEvent.extendedProperties?.private?.mertEventId;
+  // mertEventId links Google copies back to events we pushed. Only the
+  // primary calendar receives pushes, so ignore it on read-only calendars.
+  const linkedLocalId = isReadOnlyGoogleCalendarId(calendarId)
+    ? undefined
+    : googleEvent.extendedProperties?.private?.mertEventId;
   const existingByGoogleId = await prisma.event.findFirst({
     where: {
       userId,
-      googleCalendarId: GOOGLE_CALENDAR_ID,
+      googleCalendarId: calendarId,
       googleEventId: googleEvent.id,
     },
   });
@@ -671,7 +759,7 @@ async function upsertGoogleEvent(userId: string, googleEvent: GoogleCalendarEven
     ? await prisma.event.findFirst({
         where: {
           userId,
-          googleCalendarId: GOOGLE_CALENDAR_ID,
+          googleCalendarId: calendarId,
           googleEventId: googleEvent.recurringEventId,
         },
         select: { id: true },
@@ -693,7 +781,7 @@ async function upsertGoogleEvent(userId: string, googleEvent: GoogleCalendarEven
     recurrenceRule: parent ? null : recurrenceRuleFromGoogle(googleEvent),
     recurrenceEndDate: null,
     deleted: false,
-    googleCalendarId: GOOGLE_CALENDAR_ID,
+    googleCalendarId: calendarId,
     googleEventId: googleEvent.id,
     googleEtag: googleEvent.etag ?? null,
     googleUpdatedAt: googleEventUpdateDate(googleEvent),
@@ -717,7 +805,7 @@ async function upsertGoogleEvent(userId: string, googleEvent: GoogleCalendarEven
     data: {
       ...data,
       userId,
-      color: "#4285F4",
+      color: defaultColor ?? "#4285F4",
       reminderMinutes: null,
       reminderDisabled: false,
       ...(parent && { parentEventId: parent.id }),
@@ -728,7 +816,11 @@ async function upsertGoogleEvent(userId: string, googleEvent: GoogleCalendarEven
   return true;
 }
 
-async function listGoogleCalendarChanges(userId: string, syncToken: string | null) {
+async function listGoogleCalendarChanges(
+  userId: string,
+  calendarId: string,
+  syncToken: string | null
+) {
   const items: GoogleCalendarEvent[] = [];
   let nextPageToken: string | undefined;
   let nextSyncToken: string | undefined;
@@ -755,7 +847,7 @@ async function listGoogleCalendarChanges(userId: string, syncToken: string | nul
 
     const page = await googleCalendarFetch<GoogleEventsListResponse>(
       userId,
-      `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events?${params.toString()}`
+      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`
     );
     items.push(...(page.items ?? []));
     nextPageToken = page.nextPageToken;
@@ -763,6 +855,38 @@ async function listGoogleCalendarChanges(userId: string, syncToken: string | nul
   } while (nextPageToken);
 
   return { items, nextSyncToken };
+}
+
+async function syncGoogleCalendarEvents(
+  userId: string,
+  calendarId: string,
+  syncToken: string | null,
+  defaultColor?: string | null
+) {
+  let response: { items: GoogleCalendarEvent[]; nextSyncToken?: string };
+  try {
+    response = await listGoogleCalendarChanges(userId, calendarId, syncToken);
+  } catch (error) {
+    if (error instanceof GoogleCalendarSyncError && error.status === 410) {
+      response = await listGoogleCalendarChanges(userId, calendarId, null);
+    } else {
+      throw error;
+    }
+  }
+
+  const masters = response.items.filter((item) => !item.recurringEventId);
+  const instances = response.items.filter((item) => item.recurringEventId);
+  let changed = false;
+
+  for (const item of [...masters, ...instances]) {
+    const itemChanged =
+      item.status === "cancelled"
+        ? await deleteMappedGoogleEvent(userId, calendarId, item)
+        : await upsertGoogleEvent(userId, calendarId, item, defaultColor);
+    changed = changed || itemChanged;
+  }
+
+  return { changed, nextSyncToken: response.nextSyncToken };
 }
 
 export async function syncGoogleCalendarForUser(
@@ -798,34 +922,47 @@ export async function syncGoogleCalendarForUser(
   }
   writeInMemoryCache(cooldownKey, true, AUTO_SYNC_COOLDOWN_MS);
 
-  let response: { items: GoogleCalendarEvent[]; nextSyncToken?: string };
-  try {
-    response = await listGoogleCalendarChanges(userId, user.googleCalendarSyncToken);
-  } catch (error) {
-    if (error instanceof GoogleCalendarSyncError && error.status === 410) {
-      response = await listGoogleCalendarChanges(userId, null);
-    } else {
-      throw error;
+  const primary = await syncGoogleCalendarEvents(
+    userId,
+    GOOGLE_PRIMARY_CALENDAR_ID,
+    user.googleCalendarSyncToken
+  );
+  let changed = primary.changed;
+
+  // Read-only source calendars sync independently; one failing (revoked
+  // share, deleted calendar, ...) must not block the primary calendar.
+  const sources = await prisma.googleCalendarSource.findMany({
+    where: { userId },
+  });
+  for (const source of sources) {
+    try {
+      const result = await syncGoogleCalendarEvents(
+        userId,
+        source.calendarId,
+        source.syncToken,
+        source.color
+      );
+      changed = changed || result.changed;
+      await prisma.googleCalendarSource.update({
+        where: { id: source.id },
+        data: {
+          syncToken: result.nextSyncToken ?? source.syncToken,
+          lastSyncedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error(
+        `Google Calendar sync failed for calendar ${source.calendarId}`,
+        error
+      );
     }
-  }
-
-  const masters = response.items.filter((item) => !item.recurringEventId);
-  const instances = response.items.filter((item) => item.recurringEventId);
-  let changed = false;
-
-  for (const item of [...masters, ...instances]) {
-    const itemChanged =
-      item.status === "cancelled"
-        ? await deleteMappedGoogleEvent(userId, item)
-        : await upsertGoogleEvent(userId, item);
-    changed = changed || itemChanged;
   }
 
   await prisma.user.update({
     where: { id: userId },
     data: {
       googleCalendarSyncEnabled: true,
-      googleCalendarSyncToken: response.nextSyncToken ?? user.googleCalendarSyncToken,
+      googleCalendarSyncToken: primary.nextSyncToken ?? user.googleCalendarSyncToken,
       googleCalendarLastSyncedAt: new Date(),
     },
   });
@@ -842,12 +979,13 @@ export async function pushLocalEventToGoogle(userId: string, eventId: string) {
     where: { id: eventId, userId, deleted: false },
   });
   if (!event || (event.parentEventId && !event.googleEventId)) return null;
+  if (isReadOnlyGoogleCalendarId(event.googleCalendarId)) return null;
 
   const body = localEventToGoogleBody(event);
   const params = new URLSearchParams({ conferenceDataVersion: "1" });
   const path = event.googleEventId
-    ? `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`
-    : `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events?${params.toString()}`;
+    ? `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`
+    : `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events?${params.toString()}`;
   const method = event.googleEventId ? "PATCH" : "POST";
 
   let googleEvent: GoogleCalendarEvent;
@@ -864,7 +1002,7 @@ export async function pushLocalEventToGoogle(userId: string, eventId: string) {
     ) {
       googleEvent = await googleCalendarFetch<GoogleCalendarEvent>(
         userId,
-        `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events?${params.toString()}`,
+        `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events?${params.toString()}`,
         { method: "POST", body: JSON.stringify(body) }
       );
     } else {
@@ -875,7 +1013,7 @@ export async function pushLocalEventToGoogle(userId: string, eventId: string) {
   await prisma.event.update({
     where: { id: event.id },
     data: {
-      googleCalendarId: GOOGLE_CALENDAR_ID,
+      googleCalendarId: GOOGLE_PRIMARY_CALENDAR_ID,
       googleEventId: googleEvent.id,
       googleEtag: googleEvent.etag ?? null,
       googleUpdatedAt: googleEventUpdateDate(googleEvent),
@@ -888,18 +1026,184 @@ export async function pushLocalEventToGoogle(userId: string, eventId: string) {
 
 export async function deleteLocalEventFromGoogle(
   userId: string,
-  event: { googleEventId: string | null; parentEventId: string | null }
+  event: {
+    googleEventId: string | null;
+    googleCalendarId?: string | null;
+    parentEventId: string | null;
+  }
 ) {
+  if (isReadOnlyGoogleCalendarId(event.googleCalendarId)) return;
+
   const status = await getGoogleCalendarStatus(userId);
   if (!status.enabled || !status.hasCalendarScope || !event.googleEventId) return;
 
   await googleCalendarFetch<void>(
     userId,
-    `/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}`,
+    `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}`,
     { method: "DELETE" }
   ).catch((error) => {
     if (error instanceof GoogleCalendarSyncError && error.status === 404) return;
     throw error;
+  });
+}
+
+async function fetchGoogleCalendarList(userId: string) {
+  const entries: GoogleCalendarListEntry[] = [];
+  let nextPageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      maxResults: "250",
+      minAccessRole: "reader",
+      showDeleted: "false",
+    });
+    if (nextPageToken) params.set("pageToken", nextPageToken);
+
+    const page = await googleCalendarFetch<GoogleCalendarListResponse>(
+      userId,
+      `/users/me/calendarList?${params.toString()}`
+    );
+    entries.push(...(page.items ?? []));
+    nextPageToken = page.nextPageToken;
+  } while (nextPageToken);
+
+  return entries;
+}
+
+function calendarListEntryLabel(entry: GoogleCalendarListEntry) {
+  return entry.summaryOverride?.trim() || entry.summary?.trim() || entry.id;
+}
+
+/**
+ * All calendars on the user's Google account, flagged with whether they are
+ * currently selected as read-only sources. Requires the calendar-list scope.
+ */
+export async function listAvailableGoogleCalendars(
+  userId: string
+): Promise<AvailableGoogleCalendar[]> {
+  const [entries, sources] = await Promise.all([
+    fetchGoogleCalendarList(userId),
+    prisma.googleCalendarSource.findMany({
+      where: { userId },
+      select: { calendarId: true },
+    }),
+  ]);
+
+  const selectedIds = new Set(sources.map((source) => source.calendarId));
+
+  return entries
+    .filter((entry) => !entry.deleted)
+    .map((entry) => ({
+      id: entry.id,
+      summary: calendarListEntryLabel(entry),
+      primary: !!entry.primary,
+      color: entry.backgroundColor ?? null,
+      accessRole: entry.accessRole ?? null,
+      selected: !!entry.primary || selectedIds.has(entry.id),
+    }))
+    .sort((a, b) => {
+      if (a.primary !== b.primary) return a.primary ? -1 : 1;
+      return a.summary.localeCompare(b.summary);
+    });
+}
+
+async function removeGoogleCalendarSource(userId: string, calendarId: string) {
+  const channels = await prisma.googleCalendarChannel.findMany({
+    where: { userId, calendarId, active: true },
+    select: { channelId: true, resourceId: true },
+  });
+  for (const channel of channels) {
+    await stopGoogleCalendarChannel(userId, channel).catch((error) => {
+      console.error("Google Calendar channel stop failed", error);
+    });
+  }
+  await prisma.googleCalendarChannel.updateMany({
+    where: { userId, calendarId },
+    data: { active: false },
+  });
+
+  // Delete override children before their parents to avoid FK surprises.
+  await prisma.event.deleteMany({
+    where: { userId, parentEvent: { googleCalendarId: calendarId } },
+  });
+  await prisma.event.deleteMany({
+    where: { userId, googleCalendarId: calendarId },
+  });
+  await prisma.googleCalendarSource.deleteMany({
+    where: { userId, calendarId },
+  });
+}
+
+/**
+ * Replace the user's set of read-only source calendars. Removed calendars get
+ * their imported events and watch channels cleaned up; added calendars are
+ * validated against the account's calendar list and synced by the caller.
+ */
+export async function setGoogleCalendarSources(
+  userId: string,
+  calendarIds: string[]
+) {
+  const requested = [...new Set(calendarIds)].filter(
+    (id) => id && id !== GOOGLE_PRIMARY_CALENDAR_ID
+  );
+
+  const [entries, existing, account] = await Promise.all([
+    requested.length ? fetchGoogleCalendarList(userId) : Promise.resolve([]),
+    prisma.googleCalendarSource.findMany({ where: { userId } }),
+    getGoogleAccount(userId),
+  ]);
+
+  if (!account) {
+    throw new GoogleCalendarSyncError("Google account is not connected.", 409);
+  }
+
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
+  const primaryEmailId = entries.find((entry) => entry.primary)?.id;
+
+  const existingIds = new Set(existing.map((source) => source.calendarId));
+  const requestedIds = new Set(
+    // The primary calendar can also appear under the account email; never
+    // import it as a read-only duplicate.
+    requested.filter((id) => id !== primaryEmailId)
+  );
+
+  for (const source of existing) {
+    if (!requestedIds.has(source.calendarId)) {
+      await removeGoogleCalendarSource(userId, source.calendarId);
+    }
+  }
+
+  for (const calendarId of requestedIds) {
+    const entry = entriesById.get(calendarId);
+    if (!entry || entry.deleted) {
+      throw new GoogleCalendarSyncError(
+        `Calendar "${calendarId}" was not found on your Google account.`,
+        400
+      );
+    }
+
+    const data = {
+      summary: calendarListEntryLabel(entry),
+      color: entry.backgroundColor ?? null,
+    };
+    if (existingIds.has(calendarId)) {
+      await prisma.googleCalendarSource.updateMany({
+        where: { userId, calendarId },
+        data,
+      });
+    } else {
+      await prisma.googleCalendarSource.create({
+        data: { userId, calendarId, ...data },
+      });
+    }
+  }
+
+  // Removals (and stale summaries) change what the calendar shows.
+  bumpUserDataVersion("events", userId);
+
+  return prisma.googleCalendarSource.findMany({
+    where: { userId },
+    orderBy: { summary: "asc" },
   });
 }
 

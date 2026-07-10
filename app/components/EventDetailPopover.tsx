@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   Loader2,
+  Lock,
   X,
   Pencil,
   Trash2,
@@ -102,7 +103,12 @@ export function EventDetailPopover({
         onClose();
         return;
       }
-      if (onMoveTime && !event.isRecurringInstance && !event.recurrenceRule) {
+      if (
+        onMoveTime &&
+        !event.readOnly &&
+        !event.isRecurringInstance &&
+        !event.recurrenceRule
+      ) {
         if (e.key === "ArrowUp") {
           e.preventDefault();
           onMoveTime(event, -MOVE_STEP_MINUTES);
@@ -198,22 +204,26 @@ export function EventDetailPopover({
                 <Copy className="w-3.5 h-3.5" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={onEdit}
-              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              title="Edit"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-              title="Delete"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {!event.readOnly && (
+              <>
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                  title="Edit"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -275,6 +285,13 @@ export function EventDetailPopover({
                 Copied.
               </p>
             )}
+          </div>
+        )}
+
+        {event.readOnly && (
+          <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <Lock className="h-3 w-3" />
+            <span>Read-only · from a synced Google calendar</span>
           </div>
         )}
 

@@ -3,7 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./prisma";
 import { authConfig } from "@/auth.config";
 import type { Account, User } from "next-auth";
-import { ensureGoogleCalendarWatch } from "@/lib/googleCalendar";
+import { ensureGoogleCalendarWatches } from "@/lib/googleCalendar";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const SESSION_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
@@ -44,7 +44,7 @@ async function persistGoogleCalendarConsent(
       where: { id: user.id },
       data: { googleCalendarSyncEnabled: true },
     });
-    await ensureGoogleCalendarWatch(user.id).catch((error) => {
+    await ensureGoogleCalendarWatches(user.id).catch((error) => {
       console.error("Google Calendar watch setup failed", error);
     });
   }

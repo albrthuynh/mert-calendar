@@ -7,9 +7,17 @@ import {
   deleteLocalEventFromGoogle,
   pushLocalEventToGoogle,
 } from "@/lib/googleCalendar";
+import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
+}
+
+function readOnlyEventResponse() {
+  return NextResponse.json(
+    { error: "This event comes from a read-only Google calendar." },
+    { status: 403 }
+  );
 }
 
 export async function GET(
@@ -66,6 +74,9 @@ export async function PUT(
 
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (isReadOnlyGoogleCalendarId(existing.googleCalendarId)) {
+    return readOnlyEventResponse();
   }
 
   // Editing a single occurrence of a recurring series:
@@ -285,6 +296,9 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (isReadOnlyGoogleCalendarId(existing.googleCalendarId)) {
+    return readOnlyEventResponse();
+  }
 
   const body = await req.json().catch(() => ({}));
   const editScope = body?.editScope;
@@ -317,7 +331,7 @@ export async function DELETE(
     const seriesDurationMs = existing.endTime.getTime() - existing.startTime.getTime();
     const existingOverride = await prisma.event.findUnique({
       where: { instanceId },
-      select: { googleEventId: true, parentEventId: true },
+      select: { googleEventId: true, googleCalendarId: true, parentEventId: true },
     });
     if (existingOverride) {
       await deleteLocalEventFromGoogle(session.user.id, existingOverride).catch((error) => {
@@ -356,6 +370,7 @@ export async function DELETE(
 
   await deleteLocalEventFromGoogle(session.user.id, {
     googleEventId: existing.googleEventId,
+    googleCalendarId: existing.googleCalendarId,
     parentEventId: existing.parentEventId,
   }).catch((error) => {
     console.error("Google Calendar delete failed", error);

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
-  ensureGoogleCalendarWatch,
+  ensureGoogleCalendarWatches,
   getGoogleCalendarStatus,
   isGoogleCalendarSyncError,
   syncGoogleCalendarForUser,
@@ -24,7 +24,7 @@ export async function POST() {
 
   try {
     const result = await syncGoogleCalendarForUser(session.user.id, { force: true });
-    const watch = await ensureGoogleCalendarWatch(session.user.id)
+    const watch = await ensureGoogleCalendarWatches(session.user.id)
       .then((channel) => ({
         active: true,
         expiresAt: channel.expiration?.toISOString() ?? null,
@@ -65,6 +65,10 @@ export async function DELETE() {
       googleCalendarSyncToken: null,
       googleCalendarLastSyncedAt: null,
     },
+  });
+  await prisma.googleCalendarSource.updateMany({
+    where: { userId: session.user.id },
+    data: { syncToken: null, lastSyncedAt: null },
   });
 
   return NextResponse.json({ success: true });

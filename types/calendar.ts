@@ -18,6 +18,11 @@ export interface CalendarEvent {
    * identify the instance even if an override moves it.
    */
   instanceStartTime?: string | null;
+  /**
+   * True for events imported from a read-only Google calendar (any calendar
+   * other than the account's primary one). These cannot be edited or deleted.
+   */
+  readOnly?: boolean;
 }
 
 export interface ImportantDay {

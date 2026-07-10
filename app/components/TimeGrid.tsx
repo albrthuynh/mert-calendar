@@ -28,6 +28,8 @@ function layoutEvents(events: CalendarEvent[]): Array<{
   event: CalendarEvent;
   stackIndex: number;
   stackSize: number;
+  laneIndex: number;
+  laneCount: number;
   hasSameColorOverlap: boolean;
 }> {
   if (events.length === 0) return [];
@@ -41,6 +43,8 @@ function layoutEvents(events: CalendarEvent[]): Array<{
     event: CalendarEvent;
     stackIndex: number;
     stackSize: number;
+    laneIndex: number;
+    laneCount: number;
     hasSameColorOverlap: boolean;
   };
 
@@ -73,11 +77,66 @@ function layoutEvents(events: CalendarEvent[]): Array<{
       colorCounts.set(color, (colorCounts.get(color) ?? 0) + 1);
     }
 
+    const sideBySideSets = group.map((_, index) => new Set<number>([index]));
+
+    for (let i = 0; i < group.length; i += 1) {
+      const aStart = new Date(group[i].startTime).getTime();
+      const aEnd = new Date(group[i].endTime).getTime();
+
+      for (let j = i + 1; j < group.length; j += 1) {
+        const bStart = new Date(group[j].startTime).getTime();
+        const bEnd = new Date(group[j].endTime).getTime();
+        const overlapMs = Math.min(aEnd, bEnd) - Math.max(aStart, bStart);
+        const sameStart = aStart === bStart;
+        const shortOverlap =
+          overlapMs > 0 && overlapMs < 30 * 60 * 1000;
+
+        if (!sameStart && !shortOverlap) continue;
+
+        sideBySideSets[i].add(j);
+        sideBySideSets[j].add(i);
+      }
+    }
+
+    const laneInfo = group.map(() => ({ laneIndex: 0, laneCount: 1 }));
+    const visited = new Set<number>();
+
+    for (let index = 0; index < group.length; index += 1) {
+      if (visited.has(index)) continue;
+
+      const component: number[] = [];
+      const pending = [index];
+      visited.add(index);
+
+      while (pending.length > 0) {
+        const current = pending.pop()!;
+        component.push(current);
+
+        for (const next of sideBySideSets[current]) {
+          if (visited.has(next)) continue;
+          visited.add(next);
+          pending.push(next);
+        }
+      }
+
+      if (component.length <= 1) continue;
+
+      component.sort((a, b) => a - b);
+      component.forEach((eventIndex, laneIndex) => {
+        laneInfo[eventIndex] = {
+          laneIndex,
+          laneCount: component.length,
+        };
+      });
+    }
+
     group.forEach((event, index) => {
       result.push({
         event,
         stackIndex: index,
         stackSize: group.length,
+        laneIndex: laneInfo[index].laneIndex,
+        laneCount: laneInfo[index].laneCount,
         hasSameColorOverlap: (colorCounts.get(event.color.toLowerCase()) ?? 0) > 1,
       });
     });
@@ -374,6 +433,9 @@ export function TimeGrid({
         }
         setResizePreview({ event: res.event, startTime: newStart, endTime: newEnd });
       } else if (mov) {
+        // Read-only events (from synced Google calendars) can be clicked but
+        // never dragged to a new time.
+        if (mov.event.readOnly) return;
         if (!mov.isDrag) {
           const dx = e.clientX - mov.initialClientX;
           const dy = e.clientY - mov.initialClientY;
@@ -562,7 +624,7 @@ export function TimeGrid({
               ))}
 
               {/* Event blocks */}
-              {laid.map(({ event, stackIndex, stackSize, hasSameColorOverlap }) => {
+              {laid.map(({ event, stackIndex, stackSize, laneIndex, laneCount, hasSameColorOverlap }) => {
                 const isResizing =
                   resizePreview &&
                   resizePreview.event.originalId === event.originalId &&
@@ -585,6 +647,8 @@ export function TimeGrid({
                       dayStart={day}
                       stackIndex={stackIndex}
                       stackSize={stackSize}
+                      laneIndex={laneIndex}
+                      laneCount={laneCount}
                       hasSameColorOverlap={hasSameColorOverlap}
                       overrideStart={
                         isResizing ? resizePreview!.startTime : undefined
