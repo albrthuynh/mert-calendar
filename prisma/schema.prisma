@@ -58,6 +58,34 @@ model User {
   sessions                 Session[]
   todos                    Todo[]
   importantDays            ImportantDay[]
+  jobApplications          JobApplication[]
+}
+
+enum JobApplicationStatus {
+  APPLIED
+  OA
+  INTERVIEWING
+  ACCEPTED
+  REJECTED
+}
+
+model JobApplication {
+  id             String               @id @default(cuid())
+  title          String
+  company        String
+  dateApplied    String
+  status         JobApplicationStatus @default(APPLIED)
+  applicationUrl String?
+  location       String?
+  salary         String?
+  notes          String?
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, dateApplied])
 }
 
 model ImportantDay {

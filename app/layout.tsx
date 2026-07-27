@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Mert Calendar",
-  description: "Your personal calendar with integrated to-do lists",
+  title: "Mert Calendar & Opportunity Desk",
+  description: "A personal calendar, to-do list, and job application tracker",
   icons: {
     icon: "/aut_creature.webp",
     apple: "/apple-touch-icon.png",

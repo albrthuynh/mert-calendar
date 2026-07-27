@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { Session } from "next-auth";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BriefcaseBusiness, CalendarDays } from "lucide-react";
 import { DarkModeToggle } from "./DarkModeToggle";
 import { SettingsModal } from "./SettingsModal";
 import { useCalendarPreferences } from "../context/CalendarPreferencesContext";
@@ -88,9 +91,10 @@ const DEFAULT_LOGO = "/tbh-creature-autism-creature.gif";
 
 export function Navbar({ session }: { session: Session | null }) {
   const { topLeftUrl } = useCalendarPreferences();
+  const pathname = usePathname();
 
   return (
-    <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-4 shrink-0 z-10">
+    <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-3 sm:px-4 gap-2 sm:gap-4 shrink-0 z-20">
       <div className="flex items-center gap-2">
         {topLeftUrl ? (
           <img
@@ -110,10 +114,35 @@ export function Navbar({ session }: { session: Session | null }) {
             unoptimized
           />
         )}
-        <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+        <span className="hidden font-semibold text-gray-900 dark:text-gray-100 text-sm md:block">
           Mert Calendar
         </span>
       </div>
+
+      <nav className="flex items-center rounded-xl bg-gray-100 p-1 dark:bg-gray-800" aria-label="Main navigation">
+        <Link
+          href="/calendar"
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:px-3 ${
+            pathname === "/calendar"
+              ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+              : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          }`}
+        >
+          <CalendarDays size={15} />
+          <span className="hidden xs:inline sm:inline">Calendar</span>
+        </Link>
+        <Link
+          href="/jobs"
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:px-3 ${
+            pathname === "/jobs"
+              ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+              : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          }`}
+        >
+          <BriefcaseBusiness size={15} />
+          <span className="hidden xs:inline sm:inline">Job tracker</span>
+        </Link>
+      </nav>
 
       <div className="flex-1" />
 
