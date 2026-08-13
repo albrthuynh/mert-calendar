@@ -98,6 +98,28 @@ type GoogleCalendarListResponse = {
   nextPageToken?: string;
 };
 
+type GoogleEventMatchCandidate = {
+  id: string;
+};
+
+export function chooseExistingGoogleEvent<T extends GoogleEventMatchCandidate>({
+  existingByGoogleId,
+  existingByInstanceId,
+  linkedLocalEvent,
+  isRecurringInstance,
+}: {
+  existingByGoogleId: T | null;
+  existingByInstanceId: T | null;
+  linkedLocalEvent: T | null;
+  isRecurringInstance: boolean;
+}): T | null {
+  return (
+    existingByGoogleId ??
+    existingByInstanceId ??
+    (isRecurringInstance ? null : linkedLocalEvent)
+  );
+}
+
 export type AvailableGoogleCalendar = {
   id: string;
   summary: string;
@@ -769,6 +791,9 @@ async function upsertGoogleEvent(
   const instanceId = parent && originalStart
     ? `${parent.id}__${originalStart.toISOString()}`
     : null;
+  const existingByInstanceId = instanceId
+    ? await prisma.event.findFirst({ where: { instanceId, userId } })
+    : null;
 
   const link = extractMeetingLink(googleEvent);
   const data = {
@@ -788,7 +813,12 @@ async function upsertGoogleEvent(
     googleSyncedAt: new Date(),
   };
 
-  const existing = existingByGoogleId ?? linkedLocalEvent;
+  const existing = chooseExistingGoogleEvent({
+    existingByGoogleId,
+    existingByInstanceId,
+    linkedLocalEvent,
+    isRecurringInstance: Boolean(googleEvent.recurringEventId),
+  });
   if (existing) {
     await prisma.event.update({
       where: { id: existing.id },

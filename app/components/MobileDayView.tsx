@@ -239,7 +239,12 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
   const handleAddEvent = useCallback((day: Date) => {
     setCurrentDay(startOfDay(day));
-    setCreateDate(defaultEventStartForDay(day));
+    const hasRequestedTime =
+      day.getHours() !== 0 ||
+      day.getMinutes() !== 0 ||
+      day.getSeconds() !== 0 ||
+      day.getMilliseconds() !== 0;
+    setCreateDate(hasRequestedTime ? day : defaultEventStartForDay(day));
     setEditingEvent(undefined);
     setPopoverEvent(null);
     setShowEventSidebar(false);
@@ -563,7 +568,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900"
       style={containerStyle}
     >
-      {calendarMode !== "month" ? (
+      {calendarMode === "day" ? (
         <div
           className={`flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 ${overBackgroundClass}`}
         >
@@ -624,6 +629,30 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             aria-label="Next week"
           >
             <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          </button>
+        </div>
+      ) : calendarMode === "week" ? (
+        <div
+          className={`flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700 ${overBackgroundClass}`}
+        >
+          <button
+            type="button"
+            onClick={goToPrevWeek}
+            className="rounded-full p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Previous week"
+          >
+            <ChevronLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          </button>
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+            {format(weekStart, "MMMM yyyy")}
+          </span>
+          <button
+            type="button"
+            onClick={goToNextWeek}
+            className="rounded-full p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Next week"
+          >
+            <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
       ) : (
@@ -741,12 +770,16 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-            {format(currentDay, "EEEE")}
+            {calendarMode === "week"
+              ? `${format(weekStart, "MMM d")} – ${format(addDays(weekStart, 6), "MMM d")}`
+              : format(currentDay, "EEEE")}
           </span>
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            {format(currentDay, "MMMM d, yyyy")}
+            {calendarMode === "week"
+              ? "Swipe across the week · scroll for time"
+              : format(currentDay, "MMMM d, yyyy")}
           </span>
-          {selectedImportantLabel ? (
+          {calendarMode !== "week" && (selectedImportantLabel ? (
             <button
               type="button"
               onClick={(e) =>
@@ -774,7 +807,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             >
               Mark important
             </button>
-          )}
+          ))}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="inline-flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
@@ -880,7 +913,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
+      <div className="relative flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
         {calendarMode === "week" ? (
           <MobileWeekAgenda
             weekDays={weekDays}
