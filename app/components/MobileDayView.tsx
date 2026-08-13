@@ -913,7 +913,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Content */}
-      <div className="relative flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
         {calendarMode === "week" ? (
           <MobileWeekAgenda
             weekDays={weekDays}

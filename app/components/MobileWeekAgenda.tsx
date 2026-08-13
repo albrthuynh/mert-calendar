@@ -268,6 +268,7 @@ export function MobileWeekAgenda({
           ? "bg-white/75 dark:bg-gray-900/75"
           : "bg-white/90 dark:bg-gray-900/90"
       }`}
+      style={{ paddingBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
     >
       <div style={{ width: weekGridWidth }}>
         <div className="sticky top-0 z-40 bg-white/95 shadow-[0_1px_0_rgba(148,163,184,0.25)] backdrop-blur-md dark:bg-gray-900/95">
