@@ -5,7 +5,10 @@ import { useState } from "react";
 interface CalendarAppearanceModalProps {
   initialBackgroundUrl: string | null;
   initialTopLeftUrl: string | null;
-  onSave: (prefs: { backgroundUrl: string | null; topLeftUrl: string | null }) => Promise<void> | void;
+  onSave: (prefs: {
+    backgroundUrl: string | null;
+    topLeftUrl: string | null;
+  }) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -15,7 +18,9 @@ export function CalendarAppearanceModal({
   onSave,
   onClose,
 }: CalendarAppearanceModalProps) {
-  const [backgroundUrl, setBackgroundUrl] = useState(initialBackgroundUrl ?? "");
+  const [backgroundUrl, setBackgroundUrl] = useState(
+    initialBackgroundUrl ?? "",
+  );
   const [topLeftUrl, setTopLeftUrl] = useState(initialTopLeftUrl ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +51,8 @@ export function CalendarAppearanceModal({
             Calendar appearance
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Paste direct image URLs to customize your calendar background and header image. Leave
-            fields empty to use the default appearance.
+            Paste direct image URLs to customize your calendar background and
+            header image. Leave fields empty to use the default appearance.
           </p>
 
           <div className="space-y-1.5">
@@ -103,4 +108,3 @@ export function CalendarAppearanceModal({
     </div>
   );
 }
-

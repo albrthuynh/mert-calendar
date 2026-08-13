@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   useCallback,
-  type CSSProperties,
 } from "react";
 import {
   startOfDay,
@@ -28,7 +27,6 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   CalendarDays,
-  Clock,
 } from "lucide-react";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
@@ -36,6 +34,8 @@ import { EventSidebar } from "./EventSidebar";
 import { RecurringEventDeleteModal } from "./RecurringEventDeleteModal";
 import { TodoItem } from "./TodoItem";
 import { TodoFormModal } from "./TodoFormModal";
+import { MobileEventCard } from "./MobileEventCard";
+import { MobileWeekAgenda } from "./MobileWeekAgenda";
 import {
   ImportantDayEditorPopover,
   type ImportantDaySavePayload,
@@ -43,6 +43,7 @@ import {
 import { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
 import { fireCelebrationConfetti } from "@/lib/confetti";
 import { buildEventCopyPayload } from "@/lib/eventCopy";
+import { getEventsForDay } from "@/lib/calendarEventGrouping";
 import {
   buildEventDeleteRequest,
   type EventDeleteScope,
@@ -62,7 +63,7 @@ import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
 
 type MobileTab = "todos" | "events";
-type MobileCalendarMode = "day" | "month";
+type MobileCalendarMode = "day" | "week" | "month";
 
 interface MobileDayViewProps {
   backgroundUrl?: string;
@@ -94,20 +95,27 @@ function getMobileMonthDays(monthStart: Date): Date[] {
   return days;
 }
 
-function getEventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
-  const dayStart = startOfDay(day);
-  const dayEnd = endOfDay(day);
+function getVisibleRange(calendarMode: MobileCalendarMode, currentDay: Date) {
+  if (calendarMode === "month") {
+    const monthDays = getMobileMonthDays(startOfMonth(currentDay));
+    return {
+      start: startOfDay(monthDays[0]),
+      end: endOfDay(monthDays[monthDays.length - 1]),
+    };
+  }
 
-  return events
-    .filter((event) => {
-      const eventStart = new Date(event.startTime);
-      const eventEnd = new Date(event.endTime);
-      return eventStart <= dayEnd && eventEnd >= dayStart;
-    })
-    .sort(
-      (a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
+  if (calendarMode === "week") {
+    const firstDayOfWeek = startOfWeek(currentDay, { weekStartsOn: 1 });
+    return {
+      start: startOfDay(firstDayOfWeek),
+      end: endOfDay(addDays(firstDayOfWeek, 6)),
+    };
+  }
+
+  return {
+    start: startOfDay(currentDay),
+    end: endOfDay(currentDay),
+  };
 }
 
 export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
@@ -142,31 +150,23 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   useEventReminderScheduler({ events, prefs: notifPrefs });
   useTodoReminderScheduler({ todos, prefs: notifPrefs });
 
-  // Calculate the week days (starting from Sunday)
-  const weekStart = startOfWeek(currentDay, { weekStartsOn: 0 });
+  const weekStartsOn = calendarMode === "week" ? 1 : 0;
+  const weekStart = startOfWeek(currentDay, { weekStartsOn });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const mobileMonthStart = startOfMonth(currentDay);
   const mobileMonthDays = getMobileMonthDays(mobileMonthStart);
-  const visibleStart =
-    calendarMode === "month"
-      ? startOfDay(mobileMonthDays[0])
-      : startOfDay(currentDay);
-  const visibleEnd =
-    calendarMode === "month"
-      ? endOfDay(mobileMonthDays[mobileMonthDays.length - 1])
-      : endOfDay(currentDay);
+  const visibleRange = getVisibleRange(calendarMode, currentDay);
+  const visibleStartIso = visibleRange.start.toISOString();
+  const visibleEndIso = visibleRange.end.toISOString();
 
   // Fetch events + todos when the visible mobile range changes.
   useEffect(() => {
-    const start = visibleStart.toISOString();
-    const end = visibleEnd.toISOString();
-
     const fetchAll = async () => {
       setLoading(true);
       try {
         const [nextEvents, nextTodos] = await Promise.all([
-          fetchEventsForRange(start, end),
-          fetchTodosForRange(start, end),
+          fetchEventsForRange(visibleStartIso, visibleEndIso),
+          fetchTodosForRange(visibleStartIso, visibleEndIso),
         ]);
         setEvents(nextEvents);
         setTodos(nextTodos);
@@ -178,11 +178,11 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     };
 
     fetchAll();
-  }, [calendarMode, currentDay]);
+  }, [visibleEndIso, visibleStartIso]);
 
   useEffect(() => {
-    const startKey = format(visibleStart, "yyyy-MM-dd");
-    const endKey = format(visibleEnd, "yyyy-MM-dd");
+    const startKey = format(new Date(visibleStartIso), "yyyy-MM-dd");
+    const endKey = format(new Date(visibleEndIso), "yyyy-MM-dd");
 
     const fetchImportantDays = async () => {
       try {
@@ -193,7 +193,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     };
 
     fetchImportantDays();
-  }, [calendarMode, currentDay]);
+  }, [visibleEndIso, visibleStartIso]);
 
   const goToPrevWeek = useCallback(
     () => setCurrentDay((d) => startOfDay(subDays(d, 7))),
@@ -237,29 +237,28 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     []
   );
 
-  const handleAddEvent = useCallback(() => {
-    setCreateDate(defaultEventStartForDay(currentDay));
+  const handleAddEvent = useCallback((day: Date) => {
+    setCurrentDay(startOfDay(day));
+    setCreateDate(defaultEventStartForDay(day));
     setEditingEvent(undefined);
     setPopoverEvent(null);
     setShowEventSidebar(false);
     setActiveTab("events");
     setShowEventModal(true);
-  }, [currentDay]);
+  }, []);
+
+  const handleAddTodo = useCallback((day: Date) => {
+    setCurrentDay(startOfDay(day));
+    setActiveTab("todos");
+    setShowTodoModal(true);
+  }, []);
 
   // ── Event handlers ──────────────────────────────────────────
 
   const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
-    const rangeStart =
-      calendarMode === "month"
-        ? startOfDay(getMobileMonthDays(startOfMonth(currentDay))[0])
-        : startOfDay(currentDay);
-    const monthDays = getMobileMonthDays(startOfMonth(currentDay));
-    const rangeEnd =
-      calendarMode === "month"
-        ? endOfDay(monthDays[monthDays.length - 1])
-        : endOfDay(currentDay);
-    const start = rangeStart.toISOString();
-    const end = rangeEnd.toISOString();
+    const range = getVisibleRange(calendarMode, currentDay);
+    const start = range.start.toISOString();
+    const end = range.end.toISOString();
     setEvents(await fetchEventsForRange(start, end, options));
   }, [calendarMode, currentDay]);
 
@@ -564,7 +563,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900"
       style={containerStyle}
     >
-      {calendarMode === "day" ? (
+      {calendarMode !== "month" ? (
         <div
           className={`flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 ${overBackgroundClass}`}
         >
@@ -792,6 +791,17 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             </button>
             <button
               type="button"
+              onClick={() => setCalendarMode("week")}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                calendarMode === "week"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100"
+                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              }`}
+            >
+              Week
+            </button>
+            <button
+              type="button"
               onClick={() => setCalendarMode("month")}
               className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
                 calendarMode === "month"
@@ -833,7 +843,14 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
             <CalendarIcon className="w-3.5 h-3.5" />
-            <span>{format(currentDay, "EEEE, MMMM d")}</span>
+            <span>
+              {calendarMode === "week"
+                ? `${format(weekStart, "MMM d")} – ${format(
+                    addDays(weekStart, 6),
+                    "MMM d"
+                  )}`
+                : format(currentDay, "EEEE, MMMM d")}
+            </span>
           </div>
         </div>
         <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-full p-0.5">
@@ -864,7 +881,24 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
-        {activeTab === "todos" ? (
+        {calendarMode === "week" ? (
+          <MobileWeekAgenda
+            weekDays={weekDays}
+            selectedDay={currentDay}
+            events={events}
+            todos={todos}
+            activeTab={activeTab}
+            hasBackground={!!backgroundUrl}
+            onSelectDay={selectDay}
+            onAddEvent={handleAddEvent}
+            onAddTodo={handleAddTodo}
+            onEventClick={handleEventClick}
+            onTodoToggle={handleTodoToggle}
+            onTodoDelete={handleTodoDelete}
+            onTodoEdit={handleTodoEdit}
+            onTodoUpdate={handleTodoUpdate}
+          />
+        ) : activeTab === "todos" ? (
           <div className="h-full flex flex-col">
             <div className="px-4 pt-3 pb-2 flex items-center justify-between">
               <div>
@@ -879,7 +913,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
               </div>
               <button
                 type="button"
-                onClick={() => setShowTodoModal(true)}
+                onClick={() => handleAddTodo(currentDay)}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 dark:border-blue-800 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
               >
                 + Add
@@ -939,7 +973,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
               </div>
               <button
                 type="button"
-                onClick={handleAddEvent}
+                onClick={() => handleAddEvent(currentDay)}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 dark:border-blue-800 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
               >
                 + Add
@@ -949,77 +983,12 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
               {dayEvents.length > 0 ? (
                 <div className="space-y-2">
                   {dayEvents.map((event) => (
-                    <button
+                    <MobileEventCard
                       key={`${event.originalId}-${event.startTime}`}
-                      type="button"
-                      onClick={() => handleEventClick(event)}
-                      className={`w-full text-left p-3 rounded-lg border-l-4 hover:shadow-md transition-shadow ${
-                        backgroundUrl
-                          ? "bg-[var(--event-card-bg-light)] dark:bg-[var(--event-card-bg-dark)]"
-                          : "bg-white dark:bg-gray-800"
-                      }`}
-                      style={{
-                        borderLeftColor: event.color,
-                        backgroundColor: (() => {
-                          const hex = event.color;
-                          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-                          if (result) {
-                            const r = parseInt(result[1], 16);
-                            const g = parseInt(result[2], 16);
-                            const b = parseInt(result[3], 16);
-                            return backgroundUrl
-                              ? undefined
-                              : `rgba(${r}, ${g}, ${b}, 0.05)`;
-                          }
-                          return backgroundUrl ? undefined : `${event.color}0d`;
-                        })(),
-                        "--event-card-bg-light": (() => {
-                          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(event.color);
-                          if (!result) return `${event.color}38`;
-                          const r = parseInt(result[1], 16);
-                          const g = parseInt(result[2], 16);
-                          const b = parseInt(result[3], 16);
-                          return `rgba(${r}, ${g}, ${b}, 0.22)`;
-                        })(),
-                        "--event-card-bg-dark": (() => {
-                          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(event.color);
-                          if (!result) return `${event.color}0d`;
-                          const r = parseInt(result[1], 16);
-                          const g = parseInt(result[2], 16);
-                          const b = parseInt(result[3], 16);
-                          return `rgba(${r}, ${g}, ${b}, 0.05)`;
-                        })(),
-                      } as CSSProperties}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                            {event.title}
-                          </h3>
-                          {event.description && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                              {event.description}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span className="font-medium">
-                            {format(new Date(event.startTime), "h:mm a")}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span>
-                          {format(new Date(event.startTime), "h:mm a")} – {format(new Date(event.endTime), "h:mm a")}
-                        </span>
-                        {event.recurrenceRule && (
-                          <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-[10px]">
-                            Recurring
-                          </span>
-                        )}
-                      </div>
-                    </button>
+                      event={event}
+                      hasBackground={!!backgroundUrl}
+                      onClick={handleEventClick}
+                    />
                   ))}
                 </div>
               ) : (
