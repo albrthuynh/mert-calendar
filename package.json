@@ -47,6 +47,7 @@
   },
   "overrides": {
     "@hono/node-server": "1.19.13",
-    "postcss": "8.5.14"
+    "postcss": "8.5.26",
+    "deepmerge-ts": "8.0.1"
   }
 }
