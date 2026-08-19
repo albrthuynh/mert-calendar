@@ -618,7 +618,8 @@ function ApplicationRow({
 
   return (
     <div
-      className="border-b border-gray-200 bg-white last:border-b-0 dark:border-gray-800 dark:bg-gray-900"
+      id={`desktop-job-application-${application.id}`}
+      className="scroll-m-4 border-b border-gray-200 bg-white last:border-b-0 dark:border-gray-800 dark:bg-gray-900"
     >
       <div className="job-table-grid min-w-[1430px] items-start">
         <div className="px-3 py-[1.15rem] text-center text-xs font-semibold text-gray-400">
@@ -806,7 +807,7 @@ export function JobTracker() {
   >("ALL");
   const [isCreatingApplication, setIsCreatingApplication] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [mobileApplicationToRevealId, setMobileApplicationToRevealId] =
+  const [applicationToRevealId, setApplicationToRevealId] =
     useState<string | null>(null);
 
   useEffect(() => {
@@ -861,28 +862,28 @@ export function JobTracker() {
   }, [applications, searchQuery, statusFilter]);
 
   useEffect(() => {
-    if (!mobileApplicationToRevealId) return;
+    if (!applicationToRevealId) return;
 
     const animationFrameId = window.requestAnimationFrame(() => {
-      if (window.matchMedia("(max-width: 767px)").matches) {
-        const newApplicationElement = document.getElementById(
-          `mobile-job-application-${mobileApplicationToRevealId}`
-        );
-        newApplicationElement?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-        (
-          newApplicationElement?.querySelector(
-            'input[placeholder="Job title"]'
-          ) as HTMLInputElement | null
-        )?.focus({ preventScroll: true });
-      }
-      setMobileApplicationToRevealId(null);
+      const isMobileViewport = window.matchMedia("(max-width: 767px)").matches;
+      const revealElementId = isMobileViewport
+        ? `mobile-job-application-${applicationToRevealId}`
+        : `desktop-job-application-${applicationToRevealId}`;
+      const newApplicationElement = document.getElementById(revealElementId);
+      newApplicationElement?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      (
+        newApplicationElement?.querySelector(
+          'input[placeholder="Job title"]'
+        ) as HTMLInputElement | null
+      )?.focus({ preventScroll: true });
+      setApplicationToRevealId(null);
     });
 
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [filteredApplications, mobileApplicationToRevealId]);
+  }, [filteredApplications, applicationToRevealId]);
 
   function handleSavedApplication(savedApplication: JobApplication) {
     setApplications((currentApplications) => {
@@ -930,7 +931,7 @@ export function JobTracker() {
       ]);
       setStatusFilter("ALL");
       setSearchQuery("");
-      setMobileApplicationToRevealId(newApplication.id);
+      setApplicationToRevealId(newApplication.id);
     } catch (error) {
       setCreateError(
         error instanceof Error ? error.message : "Could not add application"
