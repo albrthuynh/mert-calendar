@@ -58,6 +58,11 @@ const statusDetails: Record<
     shortLabel: "OA",
     dotClassName: "bg-amber-400",
   },
+  OA_COMPLETE: {
+    label: "OA Completed",
+    shortLabel: "OA ✓",
+    dotClassName: "bg-violet-400",
+  },
   INTERVIEWING: {
     label: "Interviewing",
     shortLabel: "Interviewing",

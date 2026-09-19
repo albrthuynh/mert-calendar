@@ -1,6 +1,7 @@
 export const JOB_APPLICATION_STATUSES = [
   "APPLIED",
   "OA",
+  "OA_COMPLETE",
   "INTERVIEWING",
   "ACCEPTED",
   "REJECTED",
