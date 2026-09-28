@@ -52,7 +52,7 @@ export function TodoItem({
 
   return (
     <div
-      className="group flex items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-full"
+      className="flex flex-wrap items-start gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-full"
       draggable={isEmbedded && !editing && !showDetailsModal}
       onDragStart={(e) => {
         if (!isEmbedded || editing || showDetailsModal) return;
@@ -149,33 +149,32 @@ export function TodoItem({
         </span>
       )}
 
-      {/* Edit details button (pencil) */}
-      {!editing && (
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {!editing && (
+          <button
+            onClick={() => setShowDetailsModal(true)}
+            className={`mt-0.5 shrink-0 p-0.5 rounded transition-colors ${
+              hasBackground
+                ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
+                : "text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400"
+            }`}
+            aria-label="Edit to-do details"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        )}
         <button
-          onClick={() => setShowDetailsModal(true)}
-          className={`mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${
+          onClick={() => onDelete(todo.id)}
+          className={`mt-0.5 shrink-0 p-0.5 rounded transition-colors ${
             hasBackground
               ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
-              : "text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400"
+              : "text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
           }`}
-          aria-label="Edit to-do details"
+          aria-label="Delete to-do"
         >
-          <Pencil className="w-3 h-3" />
+          <Trash2 className="w-3 h-3" />
         </button>
-      )}
-
-      {/* Delete button */}
-      <button
-        onClick={() => onDelete(todo.id)}
-        className={`mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all ${
-          hasBackground
-            ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
-            : "text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
-        }`}
-        aria-label="Delete"
-      >
-        <Trash2 className="w-3 h-3" />
-      </button>
+      </div>
 
       {showDetailsModal && (
         <TodoFormModal
