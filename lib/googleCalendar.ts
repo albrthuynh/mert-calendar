@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
 import { randomBytes, randomUUID } from "crypto";
+import { normalizeGuestEmails, type EventGuestScope } from "@/lib/eventGuests";
 
 import {
   GOOGLE_PRIMARY_CALENDAR_ID,
@@ -45,6 +46,14 @@ type GoogleCalendarEvent = {
   recurringEventId?: string;
   originalStartTime?: GoogleEventDate;
   etag?: string;
+  organizer?: { self?: boolean; email?: string };
+  attendeesOmitted?: boolean;
+  attendees?: Array<{
+    email: string;
+    displayName?: string;
+    responseStatus?: string;
+    [property: string]: unknown;
+  }>;
   updated?: string;
   htmlLink?: string;
   hangoutLink?: string;
@@ -131,6 +140,8 @@ export type AvailableGoogleCalendar = {
 
 export type GoogleCalendarStatus = {
   connected: boolean;
+  requiresReconnect: boolean;
+  connectionError: string | null;
   enabled: boolean;
   hasCalendarScope: boolean;
   hasCalendarListScope: boolean;
@@ -142,11 +153,13 @@ export type GoogleCalendarStatus = {
 
 class GoogleCalendarSyncError extends Error {
   status: number;
+  requiresReconnect: boolean;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, requiresReconnect = false) {
     super(message);
     this.name = "GoogleCalendarSyncError";
     this.status = status;
+    this.requiresReconnect = requiresReconnect;
   }
 }
 
@@ -206,6 +219,11 @@ export async function getGoogleCalendarStatus(
 
   return {
     connected: !!account?.access_token || !!account?.refresh_token,
+    requiresReconnect: !!account && !account.refresh_token && (
+      !account.access_token || !account.expires_at ||
+      account.expires_at * 1000 < Date.now() + 60 * 1000
+    ),
+    connectionError: null,
     enabled: user?.googleCalendarSyncEnabled ?? false,
     hasCalendarScope: hasCalendarScope(account?.scope),
     hasCalendarListScope: hasCalendarListScope(account?.scope),
@@ -216,9 +234,37 @@ export async function getGoogleCalendarStatus(
   };
 }
 
+export async function checkGoogleCalendarConnection(
+  userId: string
+): Promise<GoogleCalendarStatus> {
+  const status = await getGoogleCalendarStatus(userId);
+  if (!status.connected || !status.hasCalendarScope || status.requiresReconnect) {
+    return status;
+  }
+
+  try {
+    // Probe Calendar as well as the token: a stored expiry cannot detect revoked access.
+    await googleCalendarFetch(userId, "/calendars/primary/events?maxResults=1&fields=kind");
+    return getGoogleCalendarStatus(userId);
+  } catch (error) {
+    if (!(error instanceof GoogleCalendarSyncError) || !error.requiresReconnect) {
+      throw error;
+    }
+    return {
+      ...await getGoogleCalendarStatus(userId),
+      requiresReconnect: true,
+      connectionError: error.message,
+    };
+  }
+}
+
 async function refreshGoogleAccessToken(account: GoogleAccount) {
   if (!account.refresh_token) {
-    throw new GoogleCalendarSyncError("Google account is missing a refresh token.", 409);
+    throw new GoogleCalendarSyncError(
+      "Google Calendar access has expired. Reconnect Google Calendar to continue syncing.",
+      409,
+      true
+    );
   }
 
   const clientId = process.env.AUTH_GOOGLE_ID;
@@ -239,10 +285,23 @@ async function refreshGoogleAccessToken(account: GoogleAccount) {
   });
 
   const payload = (await res.json().catch(() => ({}))) as GoogleTokenResponse;
+  if (!res.ok && payload.error === "invalid_grant") {
+    // Keep the linked account for sign-in, but stop retrying a revoked refresh token.
+    // Matching the old token avoids clearing a concurrent reconnect's new credentials.
+    await prisma.account.updateMany({
+      where: { id: account.id, refresh_token: account.refresh_token },
+      data: { access_token: null, refresh_token: null, expires_at: null },
+    });
+    throw new GoogleCalendarSyncError(
+      "Google Calendar access has expired or was revoked. Reconnect Google Calendar to continue syncing.",
+      409,
+      true
+    );
+  }
   if (!res.ok || !payload.access_token) {
     throw new GoogleCalendarSyncError(
       payload.error_description || payload.error || "Failed to refresh Google access token.",
-      res.status
+      res.ok ? 502 : res.status
     );
   }
 
@@ -267,7 +326,7 @@ async function refreshGoogleAccessToken(account: GoogleAccount) {
 async function getGoogleAccessToken(userId: string, forceRefresh = false) {
   const account = await getGoogleAccount(userId);
   if (!account) {
-    throw new GoogleCalendarSyncError("Google account is not connected.", 409);
+    throw new GoogleCalendarSyncError("Google account is not connected.", 409, true);
   }
   if (!hasCalendarScope(account.scope)) {
     throw new GoogleCalendarSyncError("Google Calendar permission has not been granted.", 409);
@@ -300,6 +359,13 @@ async function googleCalendarFetch<T>(
 
   if (res.status === 401 && retry) {
     return googleCalendarFetch<T>(userId, path, init, false);
+  }
+  if (res.status === 401) {
+    throw new GoogleCalendarSyncError(
+      "Google Calendar access was rejected. Reconnect Google Calendar to continue syncing.",
+      409,
+      true
+    );
   }
 
   if (res.status === 204) return undefined as T;
@@ -1052,6 +1118,148 @@ export async function pushLocalEventToGoogle(userId: string, eventId: string) {
   });
 
   return googleEvent;
+}
+
+type GuestTargetOptions = {
+  scope: EventGuestScope;
+  instanceStartTime?: string;
+};
+
+async function resolveGoogleGuestTarget(
+  userId: string,
+  eventId: string,
+  options: GuestTargetOptions,
+  publishIfMissing: boolean
+) {
+  const localEvent = await prisma.event.findFirst({
+    where: { id: eventId, userId, deleted: false },
+  });
+  if (!localEvent) throw new GoogleCalendarSyncError("Event not found.", 404);
+  if (isReadOnlyGoogleCalendarId(localEvent.googleCalendarId)) {
+    throw new GoogleCalendarSyncError("Guests cannot be invited to a read-only calendar event.", 403);
+  }
+
+  const status = await getGoogleCalendarStatus(userId);
+  if (!status.enabled || !status.connected || !status.hasCalendarScope || status.requiresReconnect) {
+    throw new GoogleCalendarSyncError("Connect and enable Google Calendar sync before inviting guests.", 409, status.requiresReconnect);
+  }
+  await getGoogleAccessToken(userId);
+
+  const series = localEvent.parentEventId
+    ? await prisma.event.findFirst({ where: { id: localEvent.parentEventId, userId, deleted: false } })
+    : localEvent;
+  if (!series) throw new GoogleCalendarSyncError("Recurring series not found.", 404);
+  if (isReadOnlyGoogleCalendarId(series.googleCalendarId)) {
+    throw new GoogleCalendarSyncError("Guests cannot be invited to a read-only calendar event.", 403);
+  }
+
+  const singleOccurrence = !!series.recurrenceRule && options.scope === "event";
+  let originalStart: Date | null = null;
+  let localOverride = localEvent.parentEventId ? localEvent : null;
+  if (singleOccurrence) {
+    const originalStartValue = options.instanceStartTime || localOverride?.instanceId?.slice(series.id.length + 2);
+    originalStart = originalStartValue ? new Date(originalStartValue) : null;
+    if (!originalStart || Number.isNaN(originalStart.getTime())) {
+      throw new GoogleCalendarSyncError("Choose an occurrence before inviting guests to just one event.", 400);
+    }
+    if (!localOverride) {
+      localOverride = await prisma.event.findFirst({
+        where: { userId, parentEventId: series.id, instanceId: `${series.id}__${originalStart.toISOString()}`, deleted: false },
+      });
+    }
+  }
+
+  let googleSeriesId = series.googleEventId;
+  if (!googleSeriesId && publishIfMissing) {
+    googleSeriesId = (await pushLocalEventToGoogle(userId, series.id))?.id ?? null;
+  }
+  if (!googleSeriesId) {
+    if (!publishIfMissing) return { googleEvent: null, resourcePath: "", localOverride: null };
+    throw new GoogleCalendarSyncError("Could not sync this event to Google Calendar. Try again before sending invitations.", 409);
+  }
+
+  const eventsPath = `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events`;
+  let googleEventId = googleSeriesId;
+  if (singleOccurrence && originalStart) {
+    if (localOverride?.googleEventId) {
+      googleEventId = localOverride.googleEventId;
+    } else {
+      const params = new URLSearchParams({
+        originalStart: series.allDay ? dateOnly(originalStart) : originalStart.toISOString(),
+        maxResults: "2",
+      });
+      const instances = await googleCalendarFetch<GoogleEventsListResponse>(
+        userId, `${eventsPath}/${encodeURIComponent(googleSeriesId)}/instances?${params}`
+      );
+      const instance = instances.items?.find((candidate) => candidate.status !== "cancelled");
+      if (!instance) throw new GoogleCalendarSyncError("This occurrence was not found in Google Calendar. Sync the event and try again.", 409);
+      googleEventId = instance.id;
+    }
+  }
+
+  const resourcePath = `${eventsPath}/${encodeURIComponent(googleEventId)}`;
+  const googleEvent = await googleCalendarFetch<GoogleCalendarEvent>(userId, resourcePath);
+  return { googleEvent, resourcePath, localOverride: singleOccurrence ? localOverride : null };
+}
+
+function assertGuestListEditable(googleEvent: GoogleCalendarEvent) {
+  if (googleEvent.organizer?.self === false) {
+    throw new GoogleCalendarSyncError("Only the event organizer can invite guests. Ask the organizer to add them.", 403);
+  }
+  if (googleEvent.attendeesOmitted) {
+    throw new GoogleCalendarSyncError("Google did not provide the full guest list. Manage guests in Google Calendar for this event.", 409);
+  }
+}
+
+export async function getGoogleEventGuests(userId: string, eventId: string, options: GuestTargetOptions) {
+  const { googleEvent } = await resolveGoogleGuestTarget(userId, eventId, options, false);
+  if (googleEvent) assertGuestListEditable(googleEvent);
+  return (googleEvent?.attendees ?? []).map(({ email, displayName, responseStatus }) => ({ email, displayName, responseStatus }));
+}
+
+export async function inviteGoogleEventGuests(
+  userId: string,
+  eventId: string,
+  emails: unknown,
+  options: GuestTargetOptions
+) {
+  const guestEmails = normalizeGuestEmails(emails);
+  const target = await resolveGoogleGuestTarget(userId, eventId, options, true);
+  let googleEvent = target.googleEvent!;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    assertGuestListEditable(googleEvent);
+    const attendees = [...(googleEvent.attendees ?? [])];
+    const existingEmails = new Set(attendees.map((guest) => guest.email.toLowerCase()));
+    const newEmails = guestEmails.filter((email) => !existingEmails.has(email));
+    if (!newEmails.length) return { invitedCount: 0 };
+    attendees.push(...newEmails.map((email) => ({ email })));
+    if (!googleEvent.etag) throw new GoogleCalendarSyncError("Google returned an incomplete event. Try again.", 502);
+
+    try {
+      // Attendee arrays replace the old list. Use an etag so simultaneous RSVPs survive.
+      const updated = await googleCalendarFetch<GoogleCalendarEvent>(userId, `${target.resourcePath}?sendUpdates=all`, {
+        method: "PATCH",
+        headers: { "If-Match": googleEvent.etag },
+        body: JSON.stringify({
+          ...(target.localOverride && localEventToGoogleBody(target.localOverride)),
+          attendees,
+        }),
+      });
+      if (target.localOverride) {
+        await prisma.event.update({
+          where: { id: target.localOverride.id },
+          data: { googleCalendarId: GOOGLE_PRIMARY_CALENDAR_ID, googleEventId: updated.id, googleEtag: updated.etag ?? null, googleSyncedAt: new Date() },
+        });
+      }
+      return { invitedCount: newEmails.length };
+    } catch (error) {
+      if (!(error instanceof GoogleCalendarSyncError) || error.status !== 412) throw error;
+      if (attempt === 2) throw new GoogleCalendarSyncError("The guest list changed while sending. Try again.", 409);
+      googleEvent = await googleCalendarFetch<GoogleCalendarEvent>(userId, target.resourcePath);
+    }
+  }
+  throw new GoogleCalendarSyncError("Could not send invitations. Try again.", 500);
 }
 
 export async function deleteLocalEventFromGoogle(

@@ -48,8 +48,21 @@ async function loadEventsForRange(
         parentEventId: null,
         deleted: false,
         NOT: { recurrenceRule: null },
-        startTime: { lte: rangeEnd },
-        OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: rangeStart } }],
+        OR: [
+          {
+            startTime: { lte: rangeEnd },
+            OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: rangeStart } }],
+          },
+          {
+            childEvents: {
+              some: {
+                deleted: false,
+                startTime: { lte: rangeEnd },
+                endTime: { gt: rangeStart },
+              },
+            },
+          },
+        ],
       },
       include: { childEvents: true },
     }),

@@ -192,13 +192,13 @@ export function EventFormModal({
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-black/50"
-      onClick={onClose}
+      onPointerDown={onClose}
       role="presentation"
     >
       <div className="min-h-full flex w-full items-center justify-center p-4">
         <div
           className="relative z-10 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[min(90dvh,calc(100vh-2rem))] overflow-y-auto border border-gray-100 dark:border-gray-700"
-          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
         >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4">

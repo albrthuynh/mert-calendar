@@ -209,7 +209,7 @@ export function EventSidebar({
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-40 bg-black/20 dark:bg-black/40"
-        onClick={onClose}
+        onPointerDown={onClose}
         aria-hidden="true"
       />
       {/* Sidebar panel */}

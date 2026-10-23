@@ -14,6 +14,11 @@ const DRAG_THRESHOLD_PX = 10;
 const SNAP_MINUTES = 15;
 const MIN_DURATION_MINUTES = 15;
 
+function isPrimaryCalendarPointer(pointer: React.PointerEvent) {
+  return pointer.button === 0 && pointer.isPrimary !== false &&
+    !(pointer.pointerType === "mouse" && pointer.ctrlKey);
+}
+
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function hourLabel(hour: number): string {
@@ -191,11 +196,9 @@ export function TimeGrid({
   hasBackground,
 }: TimeGridProps) {
   const gridInnerRef = useRef<HTMLDivElement>(null);
+  const activePointerRef = useRef<{ pointerId: number; captureTarget: HTMLElement } | null>(null);
   const [createPreview, setCreatePreview] = useState<CreatePreview | null>(null);
   const createPreviewRef = useRef<CreatePreview | null>(null);
-  useEffect(() => {
-    createPreviewRef.current = createPreview;
-  }, [createPreview]);
   const dragCreateRef = useRef<{
     day: Date;
     startY: number;
@@ -234,14 +237,51 @@ export function TimeGrid({
       : ((currentTime.getHours() * 60 + currentTime.getMinutes()) / 60) *
         HOUR_HEIGHT;
 
-  const clearCreateDrag = useCallback(() => {
+  const cancelPointerInteraction = useCallback(() => {
+    const activePointer = activePointerRef.current;
+    activePointerRef.current = null;
     dragCreateRef.current = null;
+    resizeRef.current = null;
+    moveRef.current = null;
+    createPreviewRef.current = null;
+    resizePreviewRef.current = null;
+    movePreviewRef.current = null;
     setCreatePreview(null);
+    setResizePreview(null);
+    setMovePreview(null);
+    if (activePointer?.captureTarget.hasPointerCapture(activePointer.pointerId)) {
+      activePointer.captureTarget.releasePointerCapture(activePointer.pointerId);
+    }
   }, []);
+
+  useEffect(() => {
+    const handleEscape = (keyboard: KeyboardEvent) => {
+      if (keyboard.key === "Escape" && activePointerRef.current) {
+        keyboard.preventDefault();
+        cancelPointerInteraction();
+      }
+    };
+    const handleOutsidePointerUp = (pointer: PointerEvent) => {
+      // Grid handlers commit first; an unmatched release outside the grid cancels.
+      if (activePointerRef.current?.pointerId === pointer.pointerId) cancelPointerInteraction();
+    };
+    window.addEventListener("keydown", handleEscape);
+    window.addEventListener("blur", cancelPointerInteraction);
+    window.addEventListener("pointerup", handleOutsidePointerUp);
+    window.addEventListener("pointercancel", handleOutsidePointerUp);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("blur", cancelPointerInteraction);
+      window.removeEventListener("pointerup", handleOutsidePointerUp);
+      window.removeEventListener("pointercancel", handleOutsidePointerUp);
+    };
+  }, [cancelPointerInteraction]);
 
   const handleColumnPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, day: Date) => {
+      if (!isPrimaryCalendarPointer(e) || activePointerRef.current) return;
       if ((e.target as HTMLElement).closest("[data-event]")) return;
+      activePointerRef.current = { pointerId: e.pointerId, captureTarget: e.currentTarget };
       e.currentTarget.setPointerCapture(e.pointerId);
       const rect = e.currentTarget.getBoundingClientRect();
       const startY = e.clientY - rect.top;
@@ -259,7 +299,11 @@ export function TimeGrid({
   const handleColumnPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, day: Date) => {
       const ref = dragCreateRef.current;
-      if (!ref || ref.day.getTime() !== day.getTime()) return;
+      if (!ref || ref.day.getTime() !== day.getTime() || activePointerRef.current?.pointerId !== e.pointerId) return;
+      if (e.buttons !== 1) {
+        cancelPointerInteraction();
+        return;
+      }
       const rect = e.currentTarget.getBoundingClientRect();
       const currentY = e.clientY - rect.top;
       if (!ref.isDrag) {
@@ -288,21 +332,20 @@ export function TimeGrid({
           startSnap = new Date(endSnap.getTime() - MIN_DURATION_MINUTES * 60 * 1000);
         }
       }
-      setCreatePreview({ day, startDate: startSnap, endDate: endSnap });
+      const preview = { day, startDate: startSnap, endDate: endSnap };
+      createPreviewRef.current = preview;
+      setCreatePreview(preview);
     },
-    []
+    [cancelPointerInteraction]
   );
 
   const handleColumnPointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, day: Date) => {
       const ref = dragCreateRef.current;
+      if (!ref || ref.day.getTime() !== day.getTime() || activePointerRef.current?.pointerId !== e.pointerId) return;
       const preview = createPreviewRef.current;
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      if (!ref || ref.day.getTime() !== day.getTime()) {
-        clearCreateDrag();
-        return;
-      }
-      clearCreateDrag();
+      cancelPointerInteraction();
+      if (!isPrimaryCalendarPointer(e)) return;
       if (ref.isDrag && preview && onSlotDragCreate) {
         onSlotDragCreate(preview.startDate, preview.endDate, preview.day);
       } else if (!ref.isDrag) {
@@ -310,14 +353,7 @@ export function TimeGrid({
         onSlotClick(clickedDate);
       }
     },
-    [onSlotDragCreate, onSlotClick, clearCreateDrag]
-  );
-
-  const handleColumnPointerCancel = useCallback(
-    (_e: React.PointerEvent<HTMLDivElement>) => {
-      clearCreateDrag();
-    },
-    [clearCreateDrag]
+    [onSlotDragCreate, onSlotClick, cancelPointerInteraction]
   );
 
   const getColumnAndLocalY = useCallback(
@@ -349,6 +385,7 @@ export function TimeGrid({
   const handleEventWrapperPointerDown = useCallback(
     (e: React.PointerEvent, event: CalendarEvent, day: Date) => {
       e.stopPropagation();
+      if (!isPrimaryCalendarPointer(e) || activePointerRef.current) return;
       const target = e.target as HTMLElement;
       const resizeStart = target.closest('[data-resize="start"]');
       const resizeEnd = target.closest('[data-resize="end"]');
@@ -357,6 +394,7 @@ export function TimeGrid({
       const columnRect = column?.getBoundingClientRect();
       const scrollTop = scrollRef.current?.scrollTop ?? 0;
       if (!grid) return;
+      activePointerRef.current = { pointerId: e.pointerId, captureTarget: grid };
       if (resizeStart && columnRect) {
         grid.setPointerCapture(e.pointerId);
         const localY = e.clientY - columnRect.top + scrollTop;
@@ -399,6 +437,11 @@ export function TimeGrid({
 
   const handleGridPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (activePointerRef.current?.pointerId !== e.pointerId) return;
+      if (e.buttons !== 1) {
+        cancelPointerInteraction();
+        return;
+      }
       const res = resizeRef.current;
       const mov = moveRef.current;
       if (res) {
@@ -431,7 +474,9 @@ export function TimeGrid({
           // Keep start fixed
           newStart = new Date(res.initialStart);
         }
-        setResizePreview({ event: res.event, startTime: newStart, endTime: newEnd });
+        const preview = { event: res.event, startTime: newStart, endTime: newEnd };
+        resizePreviewRef.current = preview;
+        setResizePreview(preview);
       } else if (mov) {
         // Read-only events (from synced Google calendars) can be clicked but
         // never dragged to a new time.
@@ -471,26 +516,18 @@ export function TimeGrid({
         }
       }
     },
-    [getColumnAndLocalY, scrollRef]
+    [getColumnAndLocalY, scrollRef, cancelPointerInteraction]
   );
-
-  useEffect(() => {
-    resizePreviewRef.current = resizePreview;
-    movePreviewRef.current = movePreview;
-  }, [resizePreview, movePreview]);
 
   const handleGridPointerUpStable = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      const grid = gridInnerRef.current;
-      if (grid) grid.releasePointerCapture(e.pointerId);
+      if (activePointerRef.current?.pointerId !== e.pointerId) return;
       const res = resizeRef.current;
       const mov = moveRef.current;
       const resPreview = resizePreviewRef.current;
       const movPreview = movePreviewRef.current;
-      resizeRef.current = null;
-      moveRef.current = null;
-      setResizePreview(null);
-      setMovePreview(null);
+      cancelPointerInteraction();
+      if (!isPrimaryCalendarPointer(e)) return;
       if (res && onEventResize && resPreview) {
         onEventResize(resPreview.event, resPreview.startTime, resPreview.endTime);
       } else if (res && res.eventElement) {
@@ -520,15 +557,8 @@ export function TimeGrid({
         }
       }
     },
-    [onEventResize, onEventMove, onEventClick]
+    [onEventResize, onEventMove, onEventClick, cancelPointerInteraction]
   );
-
-  const handleGridPointerCancel = useCallback(() => {
-    resizeRef.current = null;
-    moveRef.current = null;
-    setResizePreview(null);
-    setMovePreview(null);
-  }, []);
 
   return (
     <div className="relative flex-1 min-h-0 flex flex-col">
@@ -539,7 +569,16 @@ export function TimeGrid({
         style={{ height: `${HOUR_HEIGHT * 24}px` }}
         onPointerMove={handleGridPointerMove}
         onPointerUp={handleGridPointerUpStable}
-        onPointerCancel={handleGridPointerCancel}
+        onPointerCancel={(pointer) => {
+          if (activePointerRef.current?.pointerId === pointer.pointerId) cancelPointerInteraction();
+        }}
+        onContextMenu={cancelPointerInteraction}
+        onLostPointerCapture={(pointer) => {
+          const activePointer = activePointerRef.current;
+          if (activePointer?.pointerId === pointer.pointerId && activePointer.captureTarget === pointer.target) {
+            cancelPointerInteraction();
+          }
+        }}
       >
         {/* Time labels */}
         <div className="w-14 shrink-0 relative select-none">
@@ -601,7 +640,6 @@ export function TimeGrid({
               onPointerDown={(e) => handleColumnPointerDown(e, day)}
               onPointerMove={(e) => handleColumnPointerMove(e, day)}
               onPointerUp={(e) => handleColumnPointerUp(e, day)}
-              onPointerCancel={(e) => handleColumnPointerCancel(e)}
             >
               {/* Hour grid lines */}
               {HOURS.map((hour) => (

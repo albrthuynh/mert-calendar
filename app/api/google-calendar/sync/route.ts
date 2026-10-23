@@ -15,9 +15,9 @@ export async function POST() {
   }
 
   const status = await getGoogleCalendarStatus(session.user.id);
-  if (!status.connected || !status.hasCalendarScope) {
+  if (!status.connected || !status.hasCalendarScope || status.requiresReconnect) {
     return NextResponse.json(
-      { error: "Google Calendar permission is required." },
+      { error: "Reconnect Google Calendar to grant access and continue syncing.", requiresReconnect: true },
       { status: 409 }
     );
   }
@@ -42,6 +42,7 @@ export async function POST() {
     const statusCode = isGoogleCalendarSyncError(error) ? error.status : 500;
     return NextResponse.json(
       {
+        requiresReconnect: isGoogleCalendarSyncError(error) && error.requiresReconnect,
         error:
           error instanceof Error
             ? error.message

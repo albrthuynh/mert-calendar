@@ -1,6 +1,7 @@
 import {
   expandRecurringEventForRange,
   makeInstanceId,
+  type RecurringEventOverride,
   type RecurringEventSeries,
 } from "@/lib/recurringEvents";
 
@@ -44,6 +45,115 @@ function zonedParts(iso: string, timeZone: string) {
 
 describe("recurring event expansion", () => {
   const timeZone = "America/Chicago";
+
+  function movedThursdayOccurrence(
+    changes: Partial<RecurringEventOverride> = {}
+  ): RecurringEventOverride {
+    return {
+      id: "moved-occurrence",
+      instanceId: makeInstanceId("series-1", "2025-11-06T15:00:00.000Z"),
+      title: "Thursday event moved to Friday",
+      description: null,
+      link: null,
+      startTime: new Date("2025-11-07T15:00:00.000Z"),
+      endTime: new Date("2025-11-07T16:00:00.000Z"),
+      color: "#4285F4",
+      allDay: false,
+      reminderMinutes: null,
+      reminderDisabled: false,
+      deleted: false,
+      ...changes,
+    };
+  }
+
+  function thursdaySeries(override: RecurringEventOverride) {
+    return baseSeries({
+      startTime: new Date("2025-10-30T14:00:00.000Z"),
+      endTime: new Date("2025-10-30T15:00:00.000Z"),
+      childEvents: [override],
+    });
+  }
+
+  it("shows a Thursday occurrence moved to Friday in both week and Friday-only requests", () => {
+    const series = thursdaySeries(movedThursdayOccurrence());
+    const fridayStart = new Date("2025-11-07T06:00:00.000Z");
+    const fridayEnd = new Date("2025-11-08T05:59:59.999Z");
+    const weekEvents = expandRecurringEventForRange(
+      series,
+      new Date("2025-11-02T05:00:00.000Z"),
+      new Date("2025-11-09T05:59:59.999Z"),
+      timeZone
+    );
+    const fridayEvents = expandRecurringEventForRange(series, fridayStart, fridayEnd, timeZone);
+    expect(fridayEvents).toHaveLength(1);
+    expect(fridayEvents).toEqual(weekEvents.filter((event) =>
+      new Date(event.startTime) <= fridayEnd && new Date(event.endTime) > fridayStart
+    ));
+    expect(fridayEvents[0]).toMatchObject({
+      id: "moved-occurrence",
+      originalId: "series-1",
+      instanceStartTime: "2025-11-06T15:00:00.000Z",
+      startTime: "2025-11-07T15:00:00.000Z",
+    });
+  });
+
+  it("omits the moved occurrence from its original Thursday", () => {
+    const events = expandRecurringEventForRange(
+      thursdaySeries(movedThursdayOccurrence()),
+      new Date("2025-11-06T06:00:00.000Z"),
+      new Date("2025-11-07T05:59:59.999Z"),
+      timeZone
+    );
+    expect(events).toEqual([]);
+  });
+
+  it("includes a moved occurrence after the series recurrence end date", () => {
+    const events = expandRecurringEventForRange(
+      { ...thursdaySeries(movedThursdayOccurrence()), recurrenceEndDate: new Date("2025-11-06T00:00:00.000Z") },
+      new Date("2025-11-07T06:00:00.000Z"),
+      new Date("2025-11-08T05:59:59.999Z"),
+      timeZone
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe("moved-occurrence");
+  });
+
+  it("honors a moved occurrence stored with a legacy pre-DST instance key", () => {
+    const events = expandRecurringEventForRange(
+      thursdaySeries(movedThursdayOccurrence({
+        instanceId: makeInstanceId("series-1", "2025-11-06T14:00:00.000Z"),
+      })),
+      new Date("2025-11-07T06:00:00.000Z"),
+      new Date("2025-11-08T05:59:59.999Z"),
+      timeZone
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0].instanceStartTime).toBe("2025-11-06T15:00:00.000Z");
+  });
+
+  it("does not resurrect a deleted moved occurrence", () => {
+    const events = expandRecurringEventForRange(
+      thursdaySeries(movedThursdayOccurrence({ deleted: true })),
+      new Date("2025-11-07T06:00:00.000Z"),
+      new Date("2025-11-08T05:59:59.999Z"),
+      timeZone
+    );
+    expect(events).toEqual([]);
+  });
+
+  it("keeps the next Thursday occurrence on its normal schedule", () => {
+    const events = expandRecurringEventForRange(
+      thursdaySeries(movedThursdayOccurrence()),
+      new Date("2025-11-13T06:00:00.000Z"),
+      new Date("2025-11-14T05:59:59.999Z"),
+      timeZone
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      id: "series-1",
+      startTime: "2025-11-13T15:00:00.000Z",
+    });
+  });
 
   it("keeps weekly class wall time stable after daylight saving time ends", () => {
     const occurrences = expandRecurringEventForRange(

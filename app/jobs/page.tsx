@@ -4,6 +4,7 @@ import { Navbar } from "@/app/components/Navbar";
 import { JobTracker } from "@/app/components/JobTracker";
 import { CalendarPreferencesProvider } from "../context/CalendarPreferencesContext";
 import { NotificationPreferencesProvider } from "../context/NotificationPreferencesContext";
+import { GoogleCalendarConnectionProvider } from "../context/GoogleCalendarConnectionContext";
 
 export default async function JobsPage() {
   const session = await auth();
@@ -12,10 +13,12 @@ export default async function JobsPage() {
   return (
     <CalendarPreferencesProvider>
       <NotificationPreferencesProvider>
-        <div className="flex h-screen min-w-0 flex-col overflow-hidden bg-white dark:bg-stone-950">
-          <Navbar session={session} />
-          <JobTracker />
-        </div>
+        <GoogleCalendarConnectionProvider key={session.user?.id}>
+          <div className="flex h-screen min-w-0 flex-col overflow-hidden bg-white dark:bg-stone-950">
+            <Navbar session={session} />
+            <JobTracker />
+          </div>
+        </GoogleCalendarConnectionProvider>
       </NotificationPreferencesProvider>
     </CalendarPreferencesProvider>
   );

@@ -12,9 +12,14 @@ import {
   Pencil,
   Trash2,
   RotateCcw,
+  UserPlus,
 } from "lucide-react";
-import { CalendarEvent, RECURRENCE_OPTIONS } from "@/types/calendar";
+import { CalendarEvent } from "@/types/calendar";
 import { parseDateInputValue } from "@/lib/eventCopy";
+import { getRecurrenceLabel } from "@/lib/eventRecurrenceLabel";
+import { EventDescription } from "./EventDescription";
+import { EventGuestInvites } from "./EventGuestInvites";
+import { useGoogleCalendarConnection } from "../context/GoogleCalendarConnectionContext";
 
 interface EventDetailPopoverProps {
   event: CalendarEvent;
@@ -27,16 +32,15 @@ interface EventDetailPopoverProps {
   onMoveTime?: (event: CalendarEvent, deltaMinutes: number) => void;
 }
 
-function getRecurrenceLabel(rule: string): string {
-  const match = RECURRENCE_OPTIONS.find((o) => o.value === rule);
-  return match ? match.label : rule;
-}
-
 const MOVE_STEP_MINUTES = 30;
 /** Desktop popover width in px — keep in sync with Tailwind width class below. */
 const POPOVER_WIDTH = 320; // w-80
 
-export function EventDetailPopover({
+export function EventDetailPopover(props: EventDetailPopoverProps) {
+  return <EventDetailPopoverContent key={`${props.event.originalId}:${props.event.startTime}`} {...props} />;
+}
+
+function EventDetailPopoverContent({
   event,
   anchorRect,
   onClose,
@@ -53,6 +57,9 @@ export function EventDetailPopover({
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [copySuccess, setCopySuccess] = useState(false);
+  const { canInviteGuests: connectionAllowsInvites } = useGoogleCalendarConnection();
+  const canInviteGuests = connectionAllowsInvites && !event.readOnly;
+  const [showGuestInvites, setShowGuestInvites] = useState(false);
 
   // Position popover. On desktop, show beside the event.
   // On mobile, show above the event and clamp within the viewport.
@@ -60,18 +67,17 @@ export function EventDetailPopover({
   const VIEWPORT_MARGIN = 8;
   const isMobile = window.innerWidth <= 768;
 
-  const viewportTop = window.scrollY + VIEWPORT_MARGIN;
-  const viewportBottom = window.scrollY + window.innerHeight - VIEWPORT_MARGIN;
+  const viewportTop = VIEWPORT_MARGIN;
+  const viewportBottom = window.innerHeight - VIEWPORT_MARGIN;
 
   let top = 0;
   let left = 0;
   let width: number | undefined;
-  const maxHeight = viewportBottom - viewportTop;
 
   if (isMobile) {
     // Try to position the popover *above* the event on mobile,
     // while still clamping it within the viewport.
-    const idealTop = anchorRect.top + window.scrollY - ESTIMATED_HEIGHT - 8;
+    const idealTop = anchorRect.top - ESTIMATED_HEIGHT - 8;
     const maxTop = viewportBottom - ESTIMATED_HEIGHT;
     top = Math.max(viewportTop, Math.min(idealTop, maxTop));
 
@@ -80,7 +86,7 @@ export function EventDetailPopover({
     left = VIEWPORT_MARGIN;
   } else {
     // Desktop: position to the right of (or to the left of) the event block.
-    const idealTop = anchorRect.top + window.scrollY;
+    const idealTop = anchorRect.top;
     const maxTop = viewportBottom - ESTIMATED_HEIGHT;
     top = Math.max(viewportTop, Math.min(idealTop, maxTop));
 
@@ -88,19 +94,18 @@ export function EventDetailPopover({
       anchorRect.right + 8 + POPOVER_WIDTH > window.innerWidth
         ? anchorRect.left - (POPOVER_WIDTH + 8)
         : anchorRect.right + 8;
+    left = Math.max(VIEWPORT_MARGIN, Math.min(left, window.innerWidth - POPOVER_WIDTH - VIEWPORT_MARGIN));
   }
+  const maxHeight = viewportBottom - top;
 
   useEffect(() => {
-    setShowCopyControls(false);
-    setCopyDate(format(new Date(event.startTime), "yyyy-MM-dd"));
-    setCopyError("");
-    setCopySuccess(false);
-  }, [event.originalId, event.startTime]);
-
-  useEffect(() => {
+    if (showGuestInvites) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
+        return;
+      }
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, button, a, [contenteditable=true], [role=region]")) {
         return;
       }
       if (
@@ -132,7 +137,7 @@ export function EventDetailPopover({
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("mousedown", handleClick);
     };
-  }, [onClose, onMoveTime, event]);
+  }, [onClose, onMoveTime, event, showGuestInvites]);
 
   const start = new Date(event.startTime);
   const end = new Date(event.endTime);
@@ -165,23 +170,24 @@ export function EventDetailPopover({
   return (
     <div
       ref={ref}
-      className="fixed z-50 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-80 overflow-hidden"
+      className="fixed z-50 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-80 overflow-hidden"
+      role="dialog"
+      aria-label={event.title}
       style={{
         top,
         left,
         maxHeight,
-        overflowY: "auto",
         width,
       }}
     >
       {/* Color bar + close */}
       <div
-        className="h-2 w-full"
+        className="h-2 w-full shrink-0"
         style={{ backgroundColor: event.color }}
       />
-      <div className="px-5 pt-4 pb-5">
+      <div className="shrink-0 px-5 pt-4">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-base leading-tight">
+          <h3 className="min-w-0 break-words [overflow-wrap:anywhere] font-semibold text-gray-900 dark:text-gray-100 text-base leading-tight">
             {event.title}
           </h3>
           <div className="flex items-center gap-1 shrink-0">
@@ -234,6 +240,9 @@ export function EventDetailPopover({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-5" role="region" aria-label="Event details" tabIndex={0}>
 
         {/* Time */}
         <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
@@ -295,28 +304,29 @@ export function EventDetailPopover({
           </div>
         )}
 
+        {canInviteGuests && (
+          <button type="button" onClick={() => setShowGuestInvites(true)} aria-haspopup="dialog" aria-expanded={showGuestInvites} className="mb-3 inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:border-gray-700 dark:text-blue-400 dark:hover:bg-blue-950/30">
+            <UserPlus className="h-3.5 w-3.5" />
+            Invite guests
+          </button>
+        )}
+        {showGuestInvites && <EventGuestInvites event={event} onClose={() => setShowGuestInvites(false)} />}
+
         {/* Recurrence */}
         {event.recurrenceRule && (
           <div className="mb-2 grid grid-cols-[0.75rem_minmax(0,1fr)] gap-2 text-sm text-gray-500 dark:text-gray-400">
             <RotateCcw className="mt-0.5 h-3 w-3" />
-            <p className="min-w-0 leading-snug">
-              <span>{getRecurrenceLabel(event.recurrenceRule)}</span>
-              {event.recurrenceEndDate && (
-                <span>
-                  {" "}
-                  · until{" "}
-                  {format(new Date(event.recurrenceEndDate), "MMM d, yyyy")}
-                </span>
-              )}
+            <p className="min-w-0 break-words [overflow-wrap:anywhere] leading-snug">
+              {getRecurrenceLabel(event.recurrenceRule, event.recurrenceEndDate)}
             </p>
           </div>
         )}
 
         {/* Description */}
         {event.description && (
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 leading-relaxed border-t border-gray-100 dark:border-gray-700/50 pt-2">
-            {event.description}
-          </p>
+          <div className="text-sm text-gray-600 dark:text-gray-400 mt-2 leading-relaxed border-t border-gray-100 dark:border-gray-700/50 pt-2">
+            <EventDescription description={event.description} />
+          </div>
         )}
 
         {event.link && (

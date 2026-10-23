@@ -22,7 +22,7 @@ export function RecurringEventMoveModal({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && !busy && onClose()}
+      onPointerDown={(event) => event.target === event.currentTarget && !busy && onClose()}
     >
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-100 dark:border-gray-700">
         <div className="flex items-center justify-between px-6 pt-5 pb-2">

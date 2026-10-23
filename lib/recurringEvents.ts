@@ -196,6 +196,24 @@ function legacyOccurrenceStart(eventStart: Date, occurrenceWallDate: Date) {
   );
 }
 
+function getOccurrenceIdentity(
+  event: Pick<RecurringEventSeries, "id" | "startTime">,
+  occurrenceWallDate: Date,
+  timeZone: string
+) {
+  const startTime = wallPartsToUtcDate(wallDateToParts(occurrenceWallDate), timeZone);
+  const startTimeIso = startTime.toISOString();
+  return {
+    startTime,
+    startTimeIso,
+    instanceId: makeInstanceId(event.id, startTimeIso),
+    legacyInstanceId: makeInstanceId(
+      event.id,
+      legacyOccurrenceStart(event.startTime, occurrenceWallDate).toISOString()
+    ),
+  };
+}
+
 export function expandRecurringEventForRange(
   event: RecurringEventSeries,
   rangeStart: Date,
@@ -216,15 +234,48 @@ export function expandRecurringEventForRange(
   const occurrenceEnd =
     recurrenceLimit && recurrenceLimit < wallRangeEnd ? recurrenceLimit : wallRangeEnd;
 
-  if (occurrenceEnd < wallRangeStart) {
-    return [];
-  }
-
   const rule = new RRule({
     ...RRule.parseString(recurrenceRule),
     dtstart: dateToWallDate(event.startTime, timeZone),
   });
-  const occurrences = rule.between(wallRangeStart, occurrenceEnd, true);
+  const occurrences = occurrenceEnd < wallRangeStart
+    ? []
+    : rule.between(wallRangeStart, occurrenceEnd, true);
+  const occurrenceWallTimes = new Set(occurrences.map((occurrence) => occurrence.getTime()));
+
+  // A day request may exclude the original date of an occurrence moved into that day.
+  // Resolve its original rule occurrence so week/day results retain the same identity.
+  for (const override of event.childEvents) {
+    if (
+      override.deleted ||
+      !override.instanceId?.startsWith(`${event.id}__`) ||
+      override.startTime > rangeEnd ||
+      override.endTime <= rangeStart
+    ) {
+      continue;
+    }
+
+    const originalStart = new Date(override.instanceId.slice(event.id.length + 2));
+    if (Number.isNaN(originalStart.getTime())) continue;
+    const originalWallTime = dateToWallDate(originalStart, timeZone).getTime();
+    // Legacy UTC-based keys can differ from the actual occurrence after DST changes.
+    const lookupWindowMs = 24 * 60 * 60 * 1000;
+    const candidates = rule.between(
+      new Date(originalWallTime - lookupWindowMs),
+      new Date(originalWallTime + lookupWindowMs),
+      true
+    );
+    for (const candidate of candidates) {
+      if (recurrenceLimit && candidate > recurrenceLimit) continue;
+      const { instanceId, legacyInstanceId } = getOccurrenceIdentity(event, candidate, timeZone);
+      if (override.instanceId !== instanceId && override.instanceId !== legacyInstanceId) continue;
+      if (!occurrenceWallTimes.has(candidate.getTime())) {
+        occurrences.push(candidate);
+        occurrenceWallTimes.add(candidate.getTime());
+      }
+      break;
+    }
+  }
 
   const overridesByInstanceId = new Map<string, RecurringEventOverride>();
   for (const child of event.childEvents) {
@@ -233,20 +284,23 @@ export function expandRecurringEventForRange(
 
   const result: RecurringEventResponseItem[] = [];
 
-  for (const occ of occurrences) {
-    const occStart = wallPartsToUtcDate(wallDateToParts(occ), timeZone);
-    const occStartIso = occStart.toISOString();
-    const instanceId = makeInstanceId(event.id, occStartIso);
-    const legacyInstanceId = makeInstanceId(
-      event.id,
-      legacyOccurrenceStart(event.startTime, occ).toISOString()
-    );
+  for (const occurrence of occurrences) {
+    const {
+      startTime: occurrenceStart,
+      startTimeIso: occurrenceStartIso,
+      instanceId,
+      legacyInstanceId,
+    } = getOccurrenceIdentity(event, occurrence, timeZone);
     const override =
       overridesByInstanceId.get(instanceId) ??
       overridesByInstanceId.get(legacyInstanceId);
 
     if (override) {
-      if (override.deleted) {
+      if (
+        override.deleted ||
+        override.startTime > rangeEnd ||
+        override.endTime <= rangeStart
+      ) {
         continue;
       }
 
@@ -265,7 +319,7 @@ export function expandRecurringEventForRange(
         reminderDisabled: override.reminderDisabled ?? false,
         isRecurringInstance: true,
         originalId: event.id,
-        instanceStartTime: occStartIso,
+        instanceStartTime: occurrenceStartIso,
         readOnly,
       });
       continue;
@@ -276,8 +330,8 @@ export function expandRecurringEventForRange(
       title: event.title,
       description: event.description,
       link: event.link,
-      startTime: occStartIso,
-      endTime: new Date(occStart.getTime() + durationMs).toISOString(),
+      startTime: occurrenceStartIso,
+      endTime: new Date(occurrenceStart.getTime() + durationMs).toISOString(),
       color: event.color,
       allDay: event.allDay,
       recurrenceRule,
@@ -286,7 +340,7 @@ export function expandRecurringEventForRange(
       reminderDisabled: event.reminderDisabled ?? false,
       isRecurringInstance: true,
       originalId: event.id,
-      instanceStartTime: occStartIso,
+      instanceStartTime: occurrenceStartIso,
       readOnly,
     });
   }

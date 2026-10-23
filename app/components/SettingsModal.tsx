@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { signIn, signOut } from "next-auth/react";
 import {
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { playNotificationSound, normalizeSoundId } from "@/lib/notificationSound";
 import type { NotificationPreferences } from "../context/NotificationPreferencesContext";
+import { useGoogleCalendarConnection } from "../context/GoogleCalendarConnectionContext";
 
 const GOOGLE_CALENDAR_SCOPE =
   "openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly";
@@ -26,17 +27,6 @@ const SOUND_OPTIONS = [
   { id: "doorbell", label: "Doorbell" },
   { id: "pokemon", label: "Pokemon" },
 ] as const;
-
-type GoogleCalendarStatus = {
-  connected: boolean;
-  enabled: boolean;
-  hasCalendarScope: boolean;
-  hasCalendarListScope: boolean;
-  lastSyncedAt: string | null;
-  webhookConfigured: boolean;
-  watchActive: boolean;
-  watchExpiresAt: string | null;
-};
 
 type GoogleCalendarOption = {
   id: string;
@@ -120,12 +110,10 @@ export function SettingsModal({
   const [loadingToken, setLoadingToken] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  const [googleStatus, setGoogleStatus] = useState<GoogleCalendarStatus | null>(
-    null
-  );
-  const [googleLoading, setGoogleLoading] = useState(true);
+  const { status: googleStatus, loading: googleLoading, error: connectionError, refreshStatus, markReconnectRequired } = useGoogleCalendarConnection();
   const [googleSyncing, setGoogleSyncing] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [googleActionError, setGoogleError] = useState<string | null>(null);
+  const googleError = googleActionError || connectionError || googleStatus?.connectionError;
 
   const [googleCalendars, setGoogleCalendars] = useState<
     GoogleCalendarOption[] | null
@@ -135,7 +123,7 @@ export function SettingsModal({
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string>>(
     new Set()
   );
-  const [calendarsLoading, setCalendarsLoading] = useState(false);
+  const [calendarsLoading, setCalendarsLoading] = useState(true);
   const [calendarsSaving, setCalendarsSaving] = useState(false);
   const [calendarsError, setCalendarsError] = useState<string | null>(null);
   const [calendarsSaved, setCalendarsSaved] = useState(false);
@@ -181,16 +169,19 @@ export function SettingsModal({
     };
   }, []);
 
-  const loadGoogleCalendars = async () => {
-    setCalendarsLoading(true);
-    setCalendarsError(null);
-    try {
-      const res = await fetch("/api/google-calendar/calendars");
+  const loadGoogleCalendars = useCallback(() => fetch("/api/google-calendar/calendars")
+    .then(async (res) => {
       if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        if (payload.requiresReconnect) {
+          markReconnectRequired();
+        }
+        setCalendarsError(payload.error || "Failed to load Google calendars.");
         setGoogleCalendars(null);
         return;
       }
       const data = await res.json();
+      setCalendarsError(null);
       const calendars: GoogleCalendarOption[] = data.calendars ?? [];
       setGoogleCalendars(calendars);
       setCalendarListScopeMissing(!data.hasCalendarListScope);
@@ -201,36 +192,29 @@ export function SettingsModal({
             .map((calendar) => calendar.id)
         )
       );
-    } catch {
+    })
+    .catch(() => {
+      setCalendarsError("Could not reach Google Calendar. Try again.");
       setGoogleCalendars(null);
-    } finally {
+    })
+    .finally(() => {
       setCalendarsLoading(false);
-    }
-  };
+    }), [markReconnectRequired]);
 
   const loadGoogleStatus = async () => {
-    setGoogleLoading(true);
+    setGoogleError(null);
     try {
-      const res = await fetch("/api/google-calendar/status");
-      const status: GoogleCalendarStatus | null = res.ok
-        ? await res.json()
-        : null;
-      setGoogleStatus(status);
-      if (status?.connected && status.hasCalendarScope) {
-        loadGoogleCalendars();
-      } else {
-        setGoogleCalendars(null);
-      }
-    } catch {
-      setGoogleStatus(null);
-    } finally {
-      setGoogleLoading(false);
+      await refreshStatus();
+    } catch (error) {
+      setGoogleError(error instanceof Error ? error.message : "Failed to check Google Calendar connection.");
     }
   };
 
   useEffect(() => {
-    loadGoogleStatus();
-  }, []);
+    if (googleStatus?.connected && googleStatus.hasCalendarScope && !googleStatus.requiresReconnect) {
+      void loadGoogleCalendars();
+    }
+  }, [googleStatus, loadGoogleCalendars]);
 
   const effectiveSoundId = useMemo(
     () => normalizeSoundId(notificationSound),
@@ -241,29 +225,41 @@ export function SettingsModal({
   const isDenied = permission === "denied";
 
   const googleNeedsConsent =
-    !googleStatus?.connected || !googleStatus?.hasCalendarScope;
-  const googleLabel = googleNeedsConsent
-    ? "Connect Google Calendar"
-    : googleSyncing
-      ? "Syncing Google Calendar"
-      : googleStatus?.enabled
-        ? "Sync Google Calendar"
-        : "Enable Google Calendar";
-  const googleStateLabel = googleLoading
-    ? "Checking status"
-    : !googleStatus?.connected
-      ? "Not connected"
-      : !googleStatus.hasCalendarScope
-        ? "Calendar access needed"
-        : googleStatus.enabled && googleStatus.watchActive
-          ? "Connected, instant sync on"
-          : googleStatus.enabled && !googleStatus.webhookConfigured
-            ? "Connected, webhook URL needed"
-            : googleStatus.enabled && googleStatus.lastSyncedAt
-              ? "Connected, pull sync on"
-              : googleStatus.enabled
-                ? "Connected, waiting for first sync"
-                : "Connected, sync off";
+    !googleStatus?.connected ||
+    !googleStatus.hasCalendarScope ||
+    googleStatus.requiresReconnect;
+  const googleLabel = googleStatus?.requiresReconnect
+    ? "Reconnect Google Calendar"
+    : googleNeedsConsent
+      ? "Connect Google Calendar"
+      : googleSyncing
+        ? "Syncing Google Calendar"
+        : googleStatus?.enabled
+          ? "Sync Google Calendar"
+          : "Enable Google Calendar";
+
+  let googleStateLabel = "Connected, sync off";
+  if (googleLoading) {
+    googleStateLabel = "Checking status";
+  } else if (googleStatus?.requiresReconnect) {
+    googleStateLabel = "Google access expired. Reconnect to resume sync.";
+  } else if (!googleStatus) {
+    googleStateLabel = "Could not check connection";
+  } else if (!googleStatus.connected) {
+    googleStateLabel = "Not connected";
+  } else if (!googleStatus.hasCalendarScope) {
+    googleStateLabel = "Calendar access needed";
+  } else if (googleStatus.enabled) {
+    if (googleStatus.watchActive) {
+      googleStateLabel = "Connected, instant sync on";
+    } else if (!googleStatus.webhookConfigured) {
+      googleStateLabel = "Connected, webhook URL needed";
+    } else if (googleStatus.lastSyncedAt) {
+      googleStateLabel = "Connected, pull sync on";
+    } else {
+      googleStateLabel = "Connected, waiting for first sync";
+    }
+  }
 
   const subscriptionUrl = subscriptionToken
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}`
@@ -410,15 +406,7 @@ export function SettingsModal({
     setGoogleError(null);
 
     if (googleNeedsConsent) {
-      await signIn(
-        "google",
-        { callbackUrl: "/calendar" },
-        {
-          access_type: "offline",
-          prompt: "consent",
-          scope: GOOGLE_CALENDAR_SCOPE,
-        }
-      );
+      await handleReconnectGoogle();
       return;
     }
 
@@ -427,6 +415,9 @@ export function SettingsModal({
       const res = await fetch("/api/google-calendar/sync", { method: "POST" });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
+        if (payload.requiresReconnect) {
+          markReconnectRequired();
+        }
         throw new Error(payload.error || "Google Calendar sync failed.");
       }
 
@@ -468,6 +459,9 @@ export function SettingsModal({
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
+        if (payload.requiresReconnect) {
+          markReconnectRequired();
+        }
         throw new Error(payload.error || "Failed to update calendars.");
       }
       setCalendarsSaved(true);
@@ -510,7 +504,9 @@ export function SettingsModal({
   return createPortal(
     <div
       className="fixed inset-0 z-[300] flex items-center justify-center bg-black/45 px-3 py-4"
-      onClick={onClose}
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
@@ -969,7 +965,7 @@ export function SettingsModal({
                   )}
                 </section>
 
-                {googleStatus?.connected && googleStatus.hasCalendarScope && (
+                {googleStatus?.connected && googleStatus.hasCalendarScope && !googleStatus.requiresReconnect && (
                   <section className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                     <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
                       Other calendars
@@ -1076,7 +1072,7 @@ export function SettingsModal({
                   disabled={googleLoading || googleSyncing}
                   className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
-                  Refresh status
+                  {googleLoading ? "Checking connection..." : "Refresh status"}
                 </button>
               </div>
             )}
