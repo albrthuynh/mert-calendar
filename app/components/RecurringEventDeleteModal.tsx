@@ -6,6 +6,7 @@ interface RecurringEventDeleteModalProps {
   eventTitle: string;
   onClose: () => void;
   onChooseThisOnly: () => void | Promise<void>;
+  onChooseFollowing: () => void | Promise<void>;
   onChooseAll: () => void | Promise<void>;
   busy?: boolean;
   error?: string | null;
@@ -15,6 +16,7 @@ export function RecurringEventDeleteModal({
   eventTitle,
   onClose,
   onChooseThisOnly,
+  onChooseFollowing,
   onChooseAll,
   busy = false,
   error,
@@ -62,6 +64,19 @@ export function RecurringEventDeleteModal({
             </span>
             <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
               Delete just this occurrence and keep the rest of the series.
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void onChooseFollowing()}
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-left text-sm transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800/80"
+          >
+            <span className="font-medium text-gray-900 dark:text-gray-100">
+              This event and following events
+            </span>
+            <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+              Keep earlier events and delete this occurrence and every one after it.
             </span>
           </button>
           <button

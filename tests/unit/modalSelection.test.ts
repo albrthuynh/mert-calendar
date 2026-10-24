@@ -7,6 +7,7 @@ import { TodoFormModal } from "@/app/components/TodoFormModal";
 import { SettingsModal } from "@/app/components/SettingsModal";
 import { GoogleCalendarConnectionProvider } from "@/app/context/GoogleCalendarConnectionContext";
 import { signIn } from "next-auth/react";
+import type { CalendarEvent } from "@/types/calendar";
 
 jest.mock("next-auth/react", () => ({ signIn: jest.fn(), signOut: jest.fn() }));
 
@@ -96,6 +97,31 @@ describe("dialog selection and Google reconnection", () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   }
+
+  it("preserves the repeat end date when reopening and saving a copied event", async () => {
+    const event: CalendarEvent = {
+      id: "copied-event", originalId: "copied-event", title: "Copied event",
+      description: null, link: null, color: "#4285F4", allDay: false,
+      startTime: "2026-10-23T19:00:00.000Z", endTime: "2026-10-23T20:00:00.000Z",
+      recurrenceRule: "FREQ=DAILY", recurrenceEndDate: "2026-10-25T00:00:00.000Z",
+      isRecurringInstance: false, reminderMinutes: null, reminderDisabled: false,
+    };
+    const onSave = jest.fn();
+    (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: true, text: async () => JSON.stringify(event) });
+    await act(async () => root.render(createElement(EventFormModal, { event, onClose: jest.fn(), onSave })));
+    const endRepeatLabel = Array.from(container.querySelectorAll("label")).find(
+      (label) => label.textContent === "End repeat on"
+    )!;
+    expect((document.getElementById(endRepeatLabel.htmlFor) as HTMLInputElement).value).toBe("2026-10-25");
+    await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    const [url, request] = (globalThis.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe("/api/events/copied-event");
+    expect(JSON.parse(request.body)).toMatchObject({
+      recurrenceEndDate: "2026-10-25T00:00:00.000Z",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ recurrenceEndDate: event.recurrenceEndDate }));
+  });
 
   it("refreshes status and offers Google consent when access has expired", async () => {
     await act(async () => root.render(settingsModal()));

@@ -8,6 +8,7 @@ import {
   pushLocalEventToGoogle,
 } from "@/lib/googleCalendar";
 import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
+import { normalizeTimeZone, truncateSeriesBeforeInstance } from "@/lib/recurringEvents";
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
@@ -66,6 +67,7 @@ export async function PUT(
     reminderDisabled,
     editScope,
     instanceStartTime,
+    timeZone,
   } = body;
 
   const existing = await prisma.event.findFirst({
@@ -271,7 +273,7 @@ export async function PUT(
       ...(cleanReminderDisabled !== undefined && { reminderDisabled: cleanReminderDisabled }),
     },
   });
-  await pushLocalEventToGoogle(session.user.id, updated.id).catch((error) => {
+  await pushLocalEventToGoogle(session.user.id, updated.id, { timeZone }).catch((error) => {
     console.error("Google Calendar push failed", error);
   });
   bumpUserDataVersion("events", session.user.id);
@@ -303,6 +305,51 @@ export async function DELETE(
   const body = await req.json().catch(() => ({}));
   const editScope = body?.editScope;
   const instanceStartTime = body?.instanceStartTime;
+
+  if (editScope !== undefined && !["single", "following", "series"].includes(editScope)) {
+    return NextResponse.json({ error: "Invalid delete scope" }, { status: 400 });
+  }
+
+  if (editScope === "following") {
+    let truncatedSeries;
+    const timeZone = normalizeTimeZone(typeof body.timeZone === "string" ? body.timeZone : null);
+    try {
+      truncatedSeries = truncateSeriesBeforeInstance(existing, new Date(instanceStartTime ?? ""), timeZone);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Invalid recurring occurrence" },
+        { status: 400 }
+      );
+    }
+
+    if (truncatedSeries.recurrenceRule) {
+      const overrides = await prisma.event.findMany({ where: { parentEventId: id } });
+      const removedOverrides = overrides.filter((override) => {
+        if (!override.instanceId?.startsWith(`${id}__`)) return false;
+        const originalStart = new Date(override.instanceId.slice(id.length + 2));
+        return originalStart >= truncatedSeries.instanceStartTime ||
+          override.instanceId === truncatedSeries.legacyInstanceId;
+      });
+      await prisma.$transaction([
+        prisma.event.update({
+          where: { id },
+          data: { recurrenceRule: truncatedSeries.recurrenceRule, recurrenceEndDate: null },
+        }),
+        prisma.event.deleteMany({ where: { id: { in: removedOverrides.map((override) => override.id) } } }),
+      ]);
+      await pushLocalEventToGoogle(session.user.id, id, { timeZone }).catch((error) => {
+        console.error("Google Calendar push failed", error);
+      });
+      for (const override of removedOverrides) {
+        await deleteLocalEventFromGoogle(session.user.id, override).catch((error) => {
+          console.error("Google Calendar delete failed", error);
+        });
+      }
+      bumpUserDataVersion("events", session.user.id);
+      return NextResponse.json({ success: true });
+    }
+    // Selecting the first occurrence leaves no earlier events to preserve.
+  }
 
   if (editScope === "single") {
     if (!existing.recurrenceRule) {

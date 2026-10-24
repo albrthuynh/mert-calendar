@@ -26,6 +26,23 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
 }
 
 describe("event deletion helpers", () => {
+  it("deletes following occurrences by their original position, including rescheduled events", () => {
+    const selected = event({
+      originalId: "series-1", recurrenceRule: "FREQ=DAILY", isRecurringInstance: true,
+      instanceStartTime: "2025-11-05T14:30:00.000Z",
+    });
+    const earlierMovedLater = { ...selected, id: "earlier", instanceStartTime: "2025-11-04T14:30:00.000Z", startTime: "2025-11-08T14:30:00.000Z" };
+    const laterMovedEarlier = { ...selected, id: "later", instanceStartTime: "2025-11-06T14:30:00.000Z", startTime: "2025-11-03T14:30:00.000Z" };
+    const unrelated = event();
+    const request = buildEventDeleteRequest(selected, "following");
+    expect(JSON.parse(String(request.body))).toEqual({
+      editScope: "following", instanceStartTime: selected.instanceStartTime,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    expect(removeDeletedEventFromList([earlierMovedLater, selected, laterMovedEarlier, unrelated], selected, "following"))
+      .toEqual([earlierMovedLater, unrelated]);
+  });
+
   it("builds single-occurrence delete requests for recurring instances", () => {
     const request = buildEventDeleteRequest(
       event({

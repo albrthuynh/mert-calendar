@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import {
   startOfMonth,
-  endOfMonth,
   startOfWeek,
-  endOfWeek,
   startOfDay,
   endOfDay,
   addMonths,
@@ -16,14 +14,13 @@ import {
   isSameDay,
   isSameMonth,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, ListTodo } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListTodo, Star } from "lucide-react";
 import { EventFormModal } from "./EventFormModal";
 import { EventDetailPopover } from "./EventDetailPopover";
 import { RecurringEventDeleteModal } from "./RecurringEventDeleteModal";
 import { TodoSidebar } from "./TodoSidebar";
 import { ViewToggle, type ViewMode } from "./ViewToggle";
 import { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
-import { ImportantDayLabel } from "./ImportantDayLabel";
 import {
   ImportantDayEditorPopover,
   type ImportantDaySavePayload,
@@ -96,10 +93,6 @@ function getEventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
     );
 }
 
-function getTodosForDay(todos: Todo[], day: Date): Todo[] {
-  return todos.filter((todo) => isSameDay(new Date(todo.taskDate), day));
-}
-
 export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const [currentMonth, setCurrentMonth] = useState<Date>(
     () => startOfMonth(new Date())
@@ -129,7 +122,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   useEventReminderScheduler({ events, prefs: notifPrefs });
 
   const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
   const calendarDays = getCalendarDays(monthStart);
 
   // Fetch range = full grid (including leading/trailing days from adjacent months)
@@ -255,7 +247,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   );
 
   const handleEventSaved = useCallback(
-    async (_saved: CalendarEvent) => {
+    async () => {
       invalidateEventsCache();
       await refreshEvents({ force: true });
       setShowEventModal(false);
@@ -489,7 +481,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       style={containerStyle}
     >
       {/* Navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200/80 dark:border-white/[0.07] shrink-0 bg-white dark:bg-gray-900">
         <button
           onClick={goToToday}
           className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
@@ -512,7 +504,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
             <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
-        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">
+        <h2 className="text-[17px] font-semibold tracking-tight text-gray-800 dark:text-gray-100">
           {monthLabel}
         </h2>
         <div className="ml-auto flex items-center gap-2">
@@ -546,14 +538,14 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       </div>
 
       {/* Calendar + sidebar */}
-      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/70 dark:bg-gray-900/70">
+      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/[0.98] dark:bg-gray-950/95">
         <div className="flex flex-col flex-1 overflow-hidden min-h-0">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 shrink-0">
+          <div className="grid grid-cols-7 border-b border-gray-200/80 dark:border-white/[0.07] shrink-0">
             {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
               <div
                 key={d}
-                className="text-center py-2 text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500"
+                className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-500"
               >
                 {d}
               </div>
@@ -565,7 +557,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
             {weeks.map((week, weekIdx) => (
               <div
                 key={weekIdx}
-                className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-0"
+                className="grid grid-cols-7 border-b border-gray-200/80 dark:border-white/[0.07] last:border-b-0 min-h-0"
               >
                 {week.map((day) => {
                   const inMonth = isSameMonth(day, currentMonth);
@@ -574,7 +566,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                     ? isSameDay(day, selectedDay)
                     : false;
                   const dayEvents = getEventsForDay(events, day);
-                  const dayTodos = getTodosForDay(todos, day);
                   const dateKey = format(day, "yyyy-MM-dd");
                   const importantRow = importantDays.find((d) => d.date === dateKey);
                   const importantLabel = importantRow
@@ -584,21 +575,19 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                   return (
                     <div
                       key={day.toISOString()}
-                      className={`group relative border-r border-gray-200 dark:border-gray-700 last:border-r-0 flex flex-col min-h-0 overflow-hidden cursor-pointer transition-colors ${
-                        backgroundUrl
-                          ? "bg-transparent"
-                          : inMonth
-                          ? "bg-white dark:bg-gray-900"
-                          : "bg-gray-50/80 dark:bg-gray-950/50"
+                      className={`group relative border-r border-gray-200/80 dark:border-white/[0.07] last:border-r-0 flex flex-col min-h-0 overflow-hidden cursor-pointer transition-colors ${
+                        inMonth
+                          ? today ? "bg-blue-50/40 dark:bg-blue-400/[0.035]" : "bg-transparent"
+                          : "bg-gray-100/50 dark:bg-black/15"
                       } ${
                         isSelected
-                          ? "ring-2 ring-inset ring-blue-400 dark:ring-blue-500"
+                          ? "ring-1 ring-inset ring-blue-400 dark:ring-blue-500"
                           : ""
-                      } ${backgroundUrl ? "" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"}`}
+                      } hover:bg-gray-50/60 dark:hover:bg-white/[0.025]`}
                       onClick={() => handleDayClick(day)}
                     >
                       {/* Day number + to-dos toggle */}
-                      <div className="flex items-center justify-between gap-1 px-1.5 pt-1 shrink-0">
+                      <div className="flex h-9 items-center justify-between gap-1 px-2 pt-1 shrink-0">
                         <div className="flex items-center gap-0.5 min-w-0">
                           <button
                             onClick={(e) => {
@@ -611,16 +600,14 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                                 setShowSidebar(true);
                               }
                             }}
-                            className={`min-w-[1.25rem] flex items-center justify-center text-base font-semibold tabular-nums transition-colors shrink-0 ${
+                            aria-current={today ? "date" : undefined}
+                            aria-label={format(day, "EEEE, MMMM d, yyyy")}
+                            className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium tabular-nums transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
                               today
-                                ? backgroundUrl
-                                  ? "text-blue-900 dark:text-blue-400"
-                                  : "text-blue-600 dark:text-blue-400"
-                                : backgroundUrl
-                                ? "text-gray-900 hover:bg-black/5 dark:text-white dark:hover:bg-white/10 rounded px-0.5"
+                                ? "bg-blue-600 text-white dark:bg-blue-500"
                                 : inMonth
-                                ? "text-gray-800 dark:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-800/80 rounded px-0.5 font-medium"
-                                : "text-gray-400 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-0.5"
+                                ? "text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-white/10"
+                                : "text-gray-400 dark:text-gray-600 hover:bg-gray-200/70 dark:hover:bg-white/10"
                             }`}
                           >
                             {format(day, "d")}
@@ -637,11 +624,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                               setShowSidebar(true);
                             }
                           }}
-                          className={`p-0.5 rounded transition-colors shrink-0 ${
-                            backgroundUrl
-                              ? "text-gray-700 hover:text-gray-900 hover:bg-black/5 dark:text-white/70 dark:hover:text-white dark:hover:bg-white/10"
-                              : "text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30"
-                          }`}
+                          className="rounded p-1 text-gray-400 transition-opacity shrink-0 hover:bg-blue-50 hover:text-blue-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-blue-500"
                           aria-label={isSelected && showSidebar ? "Close to-dos" : `View to-dos for ${format(day, "MMMM d")}`}
                           title={isSelected && showSidebar ? "Close to-dos" : "View to-dos"}
                         >
@@ -652,7 +635,8 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                       {importantLabel ? (
                         <button
                           type="button"
-                          className="px-1.5 pb-1 shrink-0 text-center w-full"
+                          className="mx-2 mb-1 flex shrink-0 items-center gap-1.5 rounded px-1 py-1 text-left text-[11px] font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-white/5"
+                          title={importantLabel}
                           onClick={(e) => {
                             e.stopPropagation();
                             setImportantDayEditor({
@@ -661,16 +645,14 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                             });
                           }}
                         >
-                          <ImportantDayLabel hasBackground={!!backgroundUrl}>{importantLabel}</ImportantDayLabel>
+                          <span className="h-1 w-1 shrink-0 rounded-full bg-blue-500" aria-hidden />
+                          <span className="truncate">{importantLabel}</span>
                         </button>
                       ) : (
                         <button
                           type="button"
-                          className={`px-1.5 pb-0.5 shrink-0 text-left w-full text-[10px] font-medium transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100 ${
-                            backgroundUrl
-                              ? "text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white"
-                              : "text-blue-600/50 hover:text-blue-700 dark:text-blue-400/50 dark:hover:text-blue-300"
-                          }`}
+                          className="absolute right-8 top-2 rounded p-1 text-gray-400 transition-opacity hover:bg-blue-50 hover:text-blue-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-blue-500"
+                          aria-label={`Mark important day for ${format(day, "MMMM d")}`}
                           title="Mark important day"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -680,18 +662,24 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                             });
                           }}
                         >
-                          Mark important
+                          <Star className="h-3.5 w-3.5" />
                         </button>
                       )}
 
                       {/* Events */}
-                      <div className="flex-1 px-1 pb-0.5 space-y-px mt-0.5 overflow-y-auto min-h-0">
+                      <div className="flex-1 px-2 pb-2 space-y-1 mt-1 overflow-y-auto min-h-0">
                         {dayEvents.map((event) => {
+                          const timeLabel = event.allDay ? "All day" : format(new Date(event.startTime), "h:mm a");
+                          const eventLabel = event.allDay
+                            ? `${event.title} · All day`
+                            : `${event.title} · ${format(new Date(event.startTime), "h:mm a")} – ${format(new Date(event.endTime), "h:mm a")}`;
                           return (
                             <button
-                              key={event.id}
+                              key={`${event.id}-${event.instanceStartTime ?? event.startTime}`}
                               type="button"
                               data-event-trigger
+                              title={eventLabel}
+                              aria-label={eventLabel}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEventClick(
@@ -699,24 +687,14 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
                                   e.currentTarget.getBoundingClientRect()
                                 );
                               }}
-                              className={`w-full max-h-[calc(2lh+2px)] overflow-y-auto whitespace-normal break-words rounded px-1.5 py-px text-left text-[11px] leading-snug [overflow-wrap:anywhere] scrollbar-thin hover:brightness-90 transition-all ${
-                                backgroundUrl
-                                  ? "bg-[var(--event-bg-light)] text-black dark:bg-[var(--event-bg-dark)] dark:text-white"
-                                  : ""
-                              }`}
+                              className="month-event flex w-full min-w-0 items-center gap-2 rounded-md border-l-2 px-2 py-1 text-left leading-tight transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500"
                               style={{
-                                backgroundColor: backgroundUrl
-                                  ? undefined
-                                  : `${event.color}20`,
-                                "--event-bg-light": `${event.color}55`,
-                                "--event-bg-dark": `${event.color}20`,
-                                color: backgroundUrl ? undefined : event.color,
-                                borderLeft: `2px solid ${event.color}`,
+                                "--event-color": event.color,
+                                borderLeftColor: event.color,
                               } as CSSProperties}
                             >
-                              {event.allDay
-                                ? event.title
-                                : `${format(new Date(event.startTime), "h:mm")} – ${format(new Date(event.endTime), "h:mm")} ${event.title}`}
+                              <span className="min-w-0 flex-1 truncate text-xs font-medium text-gray-800 dark:text-gray-100">{event.title}</span>
+                              <span className="shrink-0 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">{timeLabel}</span>
                             </button>
                           );
                         })}
@@ -759,6 +737,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
             }
           }}
           onChooseThisOnly={() => applyRecurringDelete("single")}
+          onChooseFollowing={() => applyRecurringDelete("following")}
           onChooseAll={() => applyRecurringDelete("series")}
         />
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import type { GoogleCalendarStatus } from "@/lib/googleCalendar";
 
 type ConnectionState = {
@@ -17,10 +17,9 @@ type ConnectionContextValue = ConnectionState & {
 
 const GoogleCalendarConnectionContext = createContext<ConnectionContextValue | null>(null);
 
-export function GoogleCalendarConnectionProvider({ children, initialStatus = null }: {
-  children: ReactNode;
+export function GoogleCalendarConnectionProvider({ children, initialStatus = null }: PropsWithChildren<{
   initialStatus?: GoogleCalendarStatus | null;
-}) {
+}>) {
   const [connection, setConnection] = useState<ConnectionState>({ status: initialStatus, loading: true, error: null });
   const inFlightRef = useRef<Promise<GoogleCalendarStatus> | null>(null);
   const revisionRef = useRef(0);

@@ -1,6 +1,6 @@
 import { CalendarEvent } from "@/types/calendar";
 
-export type EventDeleteScope = "single" | "series";
+export type EventDeleteScope = "single" | "following" | "series";
 
 export function getEventInstanceStartTime(event: CalendarEvent): string {
   return event.instanceStartTime ?? event.startTime;
@@ -10,13 +10,14 @@ export function buildEventDeleteRequest(
   event: CalendarEvent,
   scope: EventDeleteScope = "single"
 ): RequestInit {
-  if (event.isRecurringInstance && event.recurrenceRule && scope === "single") {
+  if (event.isRecurringInstance && event.recurrenceRule && scope !== "series") {
     return {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        editScope: "single",
+        editScope: scope,
         instanceStartTime: getEventInstanceStartTime(event),
+        ...(scope === "following" && { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       }),
     };
   }
@@ -32,12 +33,15 @@ export function removeDeletedEventFromList(
   if (
     deletedEvent.isRecurringInstance &&
     deletedEvent.recurrenceRule &&
-    scope === "single"
+    scope !== "series"
   ) {
     const deletedInstanceStart = getEventInstanceStartTime(deletedEvent);
     return events.filter((event) => {
       if (event.originalId !== deletedEvent.originalId) return true;
       if (!event.isRecurringInstance) return true;
+      if (scope === "following") {
+        return new Date(getEventInstanceStartTime(event)) < new Date(deletedInstanceStart);
+      }
       return getEventInstanceStartTime(event) !== deletedInstanceStart;
     });
   }

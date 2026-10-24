@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { format } from "date-fns";
 import { Link, X } from "lucide-react";
 import { CalendarEvent } from "@/types/calendar";
 import { ColorPicker } from "./ColorPicker";
@@ -58,7 +57,7 @@ export function EventFormModal({
   );
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(
     event?.recurrenceEndDate
-      ? format(new Date(event.recurrenceEndDate), "yyyy-MM-dd")
+      ? event.recurrenceEndDate.slice(0, 10)
       : ""
   );
   const [editScope, setEditScope] = useState<"single" | "series" | null>(null);
@@ -135,6 +134,7 @@ export function EventFormModal({
         recurrenceEndDate: recurrenceEndDate
           ? new Date(recurrenceEndDate).toISOString()
           : null,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         reminderMinutes,
         reminderDisabled,
         ...(canChooseRecurringEditScope && editScope && {

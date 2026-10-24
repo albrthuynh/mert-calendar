@@ -3,6 +3,7 @@ import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/li
 import { normalizeEventLink } from "@/lib/eventLink";
 import { randomBytes, randomUUID } from "crypto";
 import { normalizeGuestEmails, type EventGuestScope } from "@/lib/eventGuests";
+import { normalizeTimeZone, recurrenceEndToUtcDayEnd } from "@/lib/recurringEvents";
 
 import {
   GOOGLE_PRIMARY_CALENDAR_ID,
@@ -668,6 +669,33 @@ function recurrenceRuleFromGoogle(event: GoogleCalendarEvent) {
   return rrule ? rrule.replace(/^RRULE:/, "") : null;
 }
 
+function recurrenceUntilValue(endDate: Date, allDay: boolean, timeZone: string) {
+  if (allDay) return endDate.toISOString().slice(0, 10).replace(/-/g, "");
+  return recurrenceEndToUtcDayEnd(endDate, timeZone)
+    .toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function recurrenceFromGoogle(event: GoogleCalendarEvent) {
+  const recurrenceRule = recurrenceRuleFromGoogle(event);
+  const storedEndDate = event.extendedProperties?.private?.mertRecurrenceEndDate;
+  const recurrenceEndDate = storedEndDate ? new Date(storedEndDate) : null;
+  if (recurrenceRule && recurrenceEndDate && !Number.isNaN(recurrenceEndDate.getTime())) {
+    const expectedUntil = recurrenceUntilValue(
+      recurrenceEndDate, isGoogleAllDay(event), event.start?.timeZone ?? "UTC"
+    );
+    const ruleParts = recurrenceRule.split(";");
+    // Only restore our separate date field while Google still has the cutoff we sent.
+    // An externally edited UNTIL must remain authoritative.
+    if (ruleParts.includes(`UNTIL=${expectedUntil}`)) {
+      return {
+        recurrenceRule: ruleParts.filter((part) => !part.startsWith("UNTIL=")).join(";"),
+        recurrenceEndDate,
+      };
+    }
+  }
+  return { recurrenceRule, recurrenceEndDate: null };
+}
+
 function googleEventUpdateDate(event: GoogleCalendarEvent) {
   if (!event.updated) return null;
   const updated = new Date(event.updated);
@@ -705,13 +733,17 @@ function localEventToGoogleBody(event: {
   endTime: Date;
   allDay: boolean;
   recurrenceRule: string | null;
-}) {
+  recurrenceEndDate?: Date | null;
+}, timeZone = "UTC") {
   const body: Record<string, unknown> = {
     summary: event.title,
     description: appendLinkToDescription(event.description, event.link),
     extendedProperties: {
       private: {
         mertEventId: event.id,
+        mertRecurrenceEndDate: event.recurrenceRule && event.recurrenceEndDate
+          ? event.recurrenceEndDate.toISOString()
+          : "",
       },
     },
   };
@@ -735,12 +767,20 @@ function localEventToGoogleBody(event: {
     body.start = { date: startDate };
     body.end = { date: endDate };
   } else {
-    body.start = { dateTime: event.startTime.toISOString() };
-    body.end = { dateTime: event.endTime.toISOString() };
+    body.start = { dateTime: event.startTime.toISOString(), ...(event.recurrenceRule && { timeZone }) };
+    body.end = { dateTime: event.endTime.toISOString(), ...(event.recurrenceRule && { timeZone }) };
   }
 
   if (event.recurrenceRule) {
-    body.recurrence = [`RRULE:${event.recurrenceRule}`];
+    let recurrenceRule = event.recurrenceRule;
+    if (event.recurrenceEndDate) {
+      const ruleParts = recurrenceRule.split(";").filter(
+        (part) => !part.startsWith("UNTIL=") && !part.startsWith("COUNT=")
+      );
+      ruleParts.push(`UNTIL=${recurrenceUntilValue(event.recurrenceEndDate, event.allDay, timeZone)}`);
+      recurrenceRule = ruleParts.join(";");
+    }
+    body.recurrence = [`RRULE:${recurrenceRule}`];
   }
 
   return body;
@@ -869,8 +909,7 @@ async function upsertGoogleEvent(
     startTime,
     endTime,
     allDay: isGoogleAllDay(googleEvent),
-    recurrenceRule: parent ? null : recurrenceRuleFromGoogle(googleEvent),
-    recurrenceEndDate: null,
+    ...(parent ? { recurrenceRule: null, recurrenceEndDate: null } : recurrenceFromGoogle(googleEvent)),
     deleted: false,
     googleCalendarId: calendarId,
     googleEventId: googleEvent.id,
@@ -1067,7 +1106,11 @@ export async function syncGoogleCalendarForUser(
   return { changed, skipped: false };
 }
 
-export async function pushLocalEventToGoogle(userId: string, eventId: string) {
+export async function pushLocalEventToGoogle(
+  userId: string,
+  eventId: string,
+  options: { timeZone?: string } = {}
+) {
   const status = await getGoogleCalendarStatus(userId);
   if (!status.enabled || !status.hasCalendarScope) return null;
 
@@ -1077,7 +1120,19 @@ export async function pushLocalEventToGoogle(userId: string, eventId: string) {
   if (!event || (event.parentEventId && !event.googleEventId)) return null;
   if (isReadOnlyGoogleCalendarId(event.googleCalendarId)) return null;
 
-  const body = localEventToGoogleBody(event);
+  let timeZone = typeof options.timeZone === "string" ? normalizeTimeZone(options.timeZone) : undefined;
+  if (event.recurrenceRule && !timeZone && event.googleEventId) {
+    try {
+      const existingGoogleEvent = await googleCalendarFetch<GoogleCalendarEvent>(
+        userId,
+        `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}`
+      );
+      timeZone = existingGoogleEvent.start?.timeZone;
+    } catch (error) {
+      if (!(error instanceof GoogleCalendarSyncError && error.status === 404)) throw error;
+    }
+  }
+  const body = localEventToGoogleBody(event, timeZone);
   const params = new URLSearchParams({ conferenceDataVersion: "1" });
   const path = event.googleEventId
     ? `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`

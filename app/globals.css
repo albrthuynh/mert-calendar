@@ -29,6 +29,22 @@ body {
   box-sizing: border-box;
 }
 
+.month-event {
+  background: color-mix(in srgb, var(--event-color) 10%, white);
+}
+
+.month-event:hover {
+  background: color-mix(in srgb, var(--event-color) 17%, white);
+}
+
+.dark .month-event {
+  background: color-mix(in srgb, var(--event-color) 18%, #131b2a);
+}
+
+.dark .month-event:hover {
+  background: color-mix(in srgb, var(--event-color) 27%, #131b2a);
+}
+
 .job-tracker-bg {
   background-color: #f9fafb;
 }

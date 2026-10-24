@@ -182,6 +182,53 @@ function recurrenceEndToWallDayEnd(date: Date) {
   );
 }
 
+export function recurrenceEndToUtcDayEnd(date: Date, timeZone: string) {
+  return wallPartsToUtcDate(wallDateToParts(recurrenceEndToWallDayEnd(date)), timeZone);
+}
+
+export function truncateSeriesBeforeInstance(
+  event: Pick<RecurringEventSeries, "id" | "startTime" | "recurrenceRule" | "recurrenceEndDate">,
+  instanceStart: Date,
+  timeZone: string
+) {
+  if (!event.recurrenceRule || Number.isNaN(instanceStart.getTime())) {
+    throw new Error("A recurring series and valid occurrence timestamp are required.");
+  }
+  const rule = new RRule({
+    ...RRule.parseString(event.recurrenceRule),
+    dtstart: dateToWallDate(event.startTime, timeZone),
+  });
+  const selectedInstanceId = makeInstanceId(event.id, instanceStart.toISOString());
+  const searchEnd = dateToWallDate(new Date(instanceStart.getTime() + 24 * 60 * 60 * 1000), timeZone);
+  const recurrenceLimit = event.recurrenceEndDate
+    ? recurrenceEndToWallDayEnd(event.recurrenceEndDate)
+    : null;
+  let precedingCount = 0;
+  let selectedIdentity: ReturnType<typeof getOccurrenceIdentity> | undefined;
+  rule.all((occurrence) => {
+    if (occurrence > searchEnd || (recurrenceLimit && occurrence > recurrenceLimit)) return false;
+    const identity = getOccurrenceIdentity(event, occurrence, timeZone);
+    if (identity.instanceId === selectedInstanceId || identity.legacyInstanceId === selectedInstanceId) {
+      selectedIdentity = identity;
+      return false;
+    }
+    precedingCount += 1;
+    return true;
+  });
+  if (!selectedIdentity) throw new Error("The selected occurrence does not belong to this series.");
+
+  // COUNT preserves the exact boundary across time zones, DST, and multiple events per day.
+  const ruleParts = event.recurrenceRule.split(";").filter(
+    (part) => !part.startsWith("UNTIL=") && !part.startsWith("COUNT=")
+  );
+  ruleParts.push(`COUNT=${precedingCount}`);
+  return {
+    recurrenceRule: precedingCount === 0 ? null : ruleParts.join(";"),
+    instanceStartTime: selectedIdentity.startTime,
+    legacyInstanceId: selectedIdentity.legacyInstanceId,
+  };
+}
+
 function legacyOccurrenceStart(eventStart: Date, occurrenceWallDate: Date) {
   return new Date(
     Date.UTC(

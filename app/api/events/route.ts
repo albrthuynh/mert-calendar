@@ -192,6 +192,7 @@ export async function POST(req: NextRequest) {
     recurrenceEndDate,
     reminderMinutes,
     reminderDisabled,
+    timeZone,
   } = body;
 
   if (!title || !startTime || !endTime) {
@@ -246,7 +247,7 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
     },
   });
-  await pushLocalEventToGoogle(session.user.id, event.id).catch((error) => {
+  await pushLocalEventToGoogle(session.user.id, event.id, { timeZone }).catch((error) => {
     console.error("Google Calendar push failed", error);
   });
   bumpUserDataVersion("events", session.user.id);

@@ -1051,6 +1051,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             }
           }}
           onChooseThisOnly={() => applyRecurringDelete("single")}
+          onChooseFollowing={() => applyRecurringDelete("following")}
           onChooseAll={() => applyRecurringDelete("series")}
         />
       )}

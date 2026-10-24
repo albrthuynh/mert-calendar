@@ -56,7 +56,7 @@ describe("shared Google Calendar connection", () => {
   });
 
   async function renderConnection(initialStatus: GoogleCalendarStatus | null = null, child: ReactNode = createElement(ConnectionHarness)) {
-    await act(async () => root.render(createElement(GoogleCalendarConnectionProvider, { initialStatus, children: child })));
+    await act(async () => root.render(createElement(GoogleCalendarConnectionProvider, { initialStatus }, child)));
   }
 
   function button(label: string) {
@@ -144,8 +144,8 @@ describe("shared Google Calendar connection", () => {
     expect(container.querySelector('[data-testid="access"]')?.textContent).toBe("false");
     (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ ...connectedStatus, connected: false, enabled: false }) });
     await act(async () => root.render(createElement(GoogleCalendarConnectionProvider, {
-      key: "different-account", initialStatus: null, children: createElement(ConnectionHarness),
-    })));
+      key: "different-account", initialStatus: null,
+    }, createElement(ConnectionHarness))));
     expect(container.querySelector('[data-testid="access"]')?.textContent).toBe("false");
   });
 });

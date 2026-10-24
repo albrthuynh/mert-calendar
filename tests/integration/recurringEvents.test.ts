@@ -1,6 +1,7 @@
 import {
   expandRecurringEventForRange,
   makeInstanceId,
+  truncateSeriesBeforeInstance,
   type RecurringEventOverride,
   type RecurringEventSeries,
 } from "@/lib/recurringEvents";
@@ -23,6 +24,44 @@ function baseSeries(overrides: Partial<RecurringEventSeries> = {}): RecurringEve
     ...overrides,
   };
 }
+
+describe("deleting this and following recurring events", () => {
+  const timeZone = "America/Chicago";
+  const series = baseSeries({
+    startTime: new Date("2025-10-30T14:00:00.000Z"),
+    endTime: new Date("2025-10-30T15:00:00.000Z"),
+  });
+
+  it("preserves earlier occurrences across DST and removes future overrides", () => {
+    const truncated = truncateSeriesBeforeInstance(series, new Date("2025-11-13T15:00:00.000Z"), timeZone);
+    expect(truncated.recurrenceRule).toBe("FREQ=WEEKLY;COUNT=2");
+    const events = expandRecurringEventForRange(
+      { ...series, recurrenceRule: truncated.recurrenceRule, recurrenceEndDate: null },
+      new Date("2025-10-29T00:00:00.000Z"), new Date("2025-12-31T00:00:00.000Z"), timeZone
+    );
+    expect(events.map((event) => event.startTime)).toEqual([
+      "2025-10-30T14:00:00.000Z", "2025-11-06T15:00:00.000Z",
+    ]);
+  });
+
+  it("accepts legacy occurrence identities and handles the first occurrence", () => {
+    expect(truncateSeriesBeforeInstance(series, new Date("2025-11-06T14:00:00.000Z"), timeZone).recurrenceRule)
+      .toBe("FREQ=WEEKLY;COUNT=1");
+    expect(truncateSeriesBeforeInstance(series, series.startTime, timeZone).recurrenceRule).toBeNull();
+  });
+
+  it("retains earlier occurrences on the same day", () => {
+    const dailySeries = { ...series, recurrenceRule: "FREQ=DAILY;BYHOUR=9,15;COUNT=10" };
+    expect(truncateSeriesBeforeInstance(dailySeries, new Date("2025-10-30T20:00:00.000Z"), timeZone).recurrenceRule)
+      .toBe("FREQ=DAILY;BYHOUR=9,15;COUNT=1");
+  });
+
+  it("rejects timestamps outside the series without deleting anything", () => {
+    for (const timestamp of ["invalid", "2025-10-29T14:00:00.000Z", "2025-11-07T15:00:00.000Z", "2026-01-01T15:00:00.000Z"]) {
+      expect(() => truncateSeriesBeforeInstance(series, new Date(timestamp), timeZone)).toThrow();
+    }
+  });
+});
 
 function zonedParts(iso: string, timeZone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {

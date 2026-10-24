@@ -115,15 +115,15 @@ For the deployed app, configure the project that owns `AUTH_GOOGLE_ID`:
 ## Event guests and details
 
 After saving an event, open its details and choose **Invite guests**. This action
-is available when Google Calendar is connected and sync is enabled. Enter guest
+is available when Google Calendar is connected and sync is enabled.
+
 The connection status is shared in React state for the current page, initialized
 from the signed-in user's stored connection and checked once in the background.
 Opening another event reuses that status immediately. **Refresh status** updates
 it, and expired authorization detected while inviting guests clears eligibility.
 The server still checks authorization for every guest request.
 
-Enter guest
-email addresses in the centered modal, pressing Enter (or **Add**) after each
+Enter guest email addresses in the centered modal, pressing Enter (or **Add**) after each
 address to build the guest list. Remove a guest with its × button, then choose
 **Send invitations** when the list is ready. Google sends the invitation
 emails; existing guests and their RSVP responses are preserved. Google organizer

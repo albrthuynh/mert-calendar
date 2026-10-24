@@ -1033,6 +1033,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
             }
           }}
           onChooseThisOnly={() => applyRecurringDelete("single")}
+          onChooseFollowing={() => applyRecurringDelete("following")}
           onChooseAll={() => applyRecurringDelete("series")}
         />
       )}
