@@ -1,4 +1,6 @@
 import { CalendarEvent } from "@/types/calendar";
+import { differenceInCalendarDays } from "date-fns";
+import { validateEventSchedule } from "@/lib/recurringEvents";
 
 export interface EventCopyPayload {
   title: string;
@@ -8,8 +10,9 @@ export interface EventCopyPayload {
   endTime: string;
   color: string;
   allDay: boolean;
-  recurrenceRule: null;
-  recurrenceEndDate: null;
+  recurrenceRule: string | null;
+  recurrenceEndDate: string | null;
+  timeZone: string;
   reminderMinutes: number | null;
   reminderDisabled: boolean;
 }
@@ -40,10 +43,10 @@ export function buildEventCopyPayload(
 ): EventCopyPayload {
   const originalStart = new Date(event.startTime);
   const originalEnd = new Date(event.endTime);
-  const durationMs = Math.max(
-    0,
-    originalEnd.getTime() - originalStart.getTime()
-  );
+  if (Number.isNaN(targetDay.getTime())) throw new Error("Choose a valid copy date.");
+  if (!Number.isFinite(originalStart.getTime()) || !Number.isFinite(originalEnd.getTime()) || originalEnd <= originalStart) {
+    throw new Error("The original event has an invalid start or end time.");
+  }
 
   const copiedStart = new Date(targetDay);
   copiedStart.setHours(
@@ -53,9 +56,18 @@ export function buildEventCopyPayload(
     originalStart.getMilliseconds()
   );
 
-  const copiedEnd = new Date(copiedStart.getTime() + durationMs);
+  const copiedEnd = new Date(copiedStart);
+  copiedEnd.setDate(copiedEnd.getDate() + differenceInCalendarDays(originalEnd, originalStart));
+  copiedEnd.setHours(originalEnd.getHours(), originalEnd.getMinutes(), originalEnd.getSeconds(), originalEnd.getMilliseconds());
 
-  return {
+  if (event.allDay) {
+    copiedStart.setTime(Date.UTC(targetDay.getFullYear(), targetDay.getMonth(), targetDay.getDate()));
+    const originalDayCount = (Date.UTC(originalEnd.getUTCFullYear(), originalEnd.getUTCMonth(), originalEnd.getUTCDate()) -
+      Date.UTC(originalStart.getUTCFullYear(), originalStart.getUTCMonth(), originalStart.getUTCDate())) / 86400000;
+    copiedEnd.setTime(copiedStart.getTime() + originalDayCount * 86400000);
+  }
+
+  const payload: EventCopyPayload = {
     title: event.title,
     description: event.description,
     link: event.link,
@@ -63,9 +75,15 @@ export function buildEventCopyPayload(
     endTime: copiedEnd.toISOString(),
     color: event.color,
     allDay: event.allDay,
-    recurrenceRule: null,
-    recurrenceEndDate: null,
+    recurrenceRule: event.recurrenceRule,
+    recurrenceEndDate: event.recurrenceEndDate,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     reminderMinutes: event.reminderMinutes,
     reminderDisabled: event.reminderDisabled,
   };
+  validateEventSchedule({
+    ...payload, startTime: copiedStart, endTime: copiedEnd,
+    recurrenceEndDate: payload.recurrenceEndDate ? new Date(payload.recurrenceEndDate) : null,
+  }, payload.timeZone);
+  return payload;
 }

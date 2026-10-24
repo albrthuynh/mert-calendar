@@ -138,6 +138,13 @@ export async function GET(
         occurrenceEnd < oneMonthAgo
           ? []
           : rule.between(oneMonthAgo, occurrenceEnd, true);
+      if (
+        event.startTime >= oneMonthAgo && event.startTime <= occurrenceEnd &&
+        (!rule.options.until || event.startTime <= rule.options.until) &&
+        !occurrences.some((occurrence) => occurrence.getTime() === event.startTime.getTime())
+      ) {
+        occurrences.unshift(event.startTime);
+      }
       const durationMs = event.endTime.getTime() - event.startTime.getTime();
 
       for (const occ of occurrences) {

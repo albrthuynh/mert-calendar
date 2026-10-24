@@ -98,10 +98,10 @@ describe("dialog selection and Google reconnection", () => {
     });
   }
 
-  it("preserves the repeat end date when reopening and saving a copied event", async () => {
+  it.each([false, true])("preserves the repeat end date and all-day flag (%s) when reopening a copy", async (allDay) => {
     const event: CalendarEvent = {
       id: "copied-event", originalId: "copied-event", title: "Copied event",
-      description: null, link: null, color: "#4285F4", allDay: false,
+      description: null, link: null, color: "#4285F4", allDay,
       startTime: "2026-10-23T19:00:00.000Z", endTime: "2026-10-23T20:00:00.000Z",
       recurrenceRule: "FREQ=DAILY", recurrenceEndDate: "2026-10-25T00:00:00.000Z",
       isRecurringInstance: false, reminderMinutes: null, reminderDisabled: false,
@@ -118,9 +118,33 @@ describe("dialog selection and Google reconnection", () => {
     expect(url).toBe("/api/events/copied-event");
     expect(JSON.parse(request.body)).toMatchObject({
       recurrenceEndDate: "2026-10-25T00:00:00.000Z",
+      allDay,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ recurrenceEndDate: event.recurrenceEndDate }));
+  });
+
+  it("replaces an imported UNTIL when editing its ends-on date", async () => {
+    const event: CalendarEvent = {
+      id: "copy-1", originalId: "copy-1", title: "Copied class", description: null, link: null,
+      color: "#4285F4", allDay: false, startTime: "2026-10-23T19:00:00.000Z", endTime: "2026-10-23T20:00:00.000Z",
+      recurrenceRule: "FREQ=WEEKLY;UNTIL=20261030T045959Z", recurrenceEndDate: null,
+      isRecurringInstance: false, reminderMinutes: null, reminderDisabled: false,
+    };
+    (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: true, text: async () => JSON.stringify(event) });
+    await act(async () => root.render(createElement(EventFormModal, { event, onClose: jest.fn(), onSave: jest.fn() })));
+    const label = Array.from(container.querySelectorAll("label")).find((label) => label.textContent === "End repeat on")!;
+    const input = document.getElementById(label.htmlFor) as HTMLInputElement;
+    expect(input.value).not.toBe("");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "2026-11-12");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(JSON.parse((globalThis.fetch as jest.Mock).mock.calls[0][1].body)).toMatchObject({
+      recurrenceRule: "FREQ=WEEKLY", recurrenceEndDate: "2026-11-12T00:00:00.000Z",
+    });
   });
 
   it("refreshes status and offers Google consent when access has expired", async () => {

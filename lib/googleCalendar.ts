@@ -3,7 +3,7 @@ import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/li
 import { normalizeEventLink } from "@/lib/eventLink";
 import { randomBytes, randomUUID } from "crypto";
 import { normalizeGuestEmails, type EventGuestScope } from "@/lib/eventGuests";
-import { normalizeTimeZone, recurrenceEndToUtcDayEnd } from "@/lib/recurringEvents";
+import { eventStartMatchesRecurrence, getLastRecurrenceStartBeforeDate, normalizeTimeZone, recurrenceEndToUtcDayEnd } from "@/lib/recurringEvents";
 
 import {
   GOOGLE_PRIMARY_CALENDAR_ID,
@@ -679,6 +679,14 @@ function recurrenceFromGoogle(event: GoogleCalendarEvent) {
   const recurrenceRule = recurrenceRuleFromGoogle(event);
   const storedEndDate = event.extendedProperties?.private?.mertRecurrenceEndDate;
   const recurrenceEndDate = storedEndDate ? new Date(storedEndDate) : null;
+  const storedRule = event.extendedProperties?.private?.mertRecurrenceRule;
+  const syncedRule = event.extendedProperties?.private?.mertSyncedRecurrenceRule;
+  if (syncedRule) {
+    if (syncedRule === recurrenceRule && storedRule && (!recurrenceEndDate || Number.isFinite(recurrenceEndDate.getTime()))) {
+      return { recurrenceRule: storedRule, recurrenceEndDate };
+    }
+    return { recurrenceRule, recurrenceEndDate: null };
+  }
   if (recurrenceRule && recurrenceEndDate && !Number.isNaN(recurrenceEndDate.getTime())) {
     const expectedUntil = recurrenceUntilValue(
       recurrenceEndDate, isGoogleAllDay(event), event.start?.timeZone ?? "UTC"
@@ -734,17 +742,19 @@ function localEventToGoogleBody(event: {
   allDay: boolean;
   recurrenceRule: string | null;
   recurrenceEndDate?: Date | null;
+  parentEventId?: string | null;
 }, timeZone = "UTC") {
+  const privateProperties = {
+    mertEventId: event.id,
+    mertRecurrenceEndDate: event.recurrenceRule && event.recurrenceEndDate ? event.recurrenceEndDate.toISOString() : "",
+    mertRecurrenceRule: event.recurrenceRule ?? "",
+    mertSyncedRecurrenceRule: "",
+  };
   const body: Record<string, unknown> = {
     summary: event.title,
     description: appendLinkToDescription(event.description, event.link),
     extendedProperties: {
-      private: {
-        mertEventId: event.id,
-        mertRecurrenceEndDate: event.recurrenceRule && event.recurrenceEndDate
-          ? event.recurrenceEndDate.toISOString()
-          : "",
-      },
+      private: privateProperties,
     },
   };
 
@@ -777,10 +787,27 @@ function localEventToGoogleBody(event: {
       const ruleParts = recurrenceRule.split(";").filter(
         (part) => !part.startsWith("UNTIL=") && !part.startsWith("COUNT=")
       );
-      ruleParts.push(`UNTIL=${recurrenceUntilValue(event.recurrenceEndDate, event.allDay, timeZone)}`);
+      let until = recurrenceUntilValue(event.recurrenceEndDate, event.allDay, timeZone);
+      if (/(?:^|;)(COUNT|UNTIL)=/.test(recurrenceRule)) {
+        const lastStart = getLastRecurrenceStartBeforeDate(recurrenceRule, event.startTime, event.recurrenceEndDate, event.allDay ? "UTC" : timeZone);
+        if (lastStart) {
+          until = event.allDay ? dateOnly(lastStart).replace(/-/g, "")
+            : lastStart.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+        }
+      }
+      ruleParts.push(`UNTIL=${until}`);
       recurrenceRule = ruleParts.join(";");
     }
-    body.recurrence = [`RRULE:${recurrenceRule}`];
+    privateProperties.mertSyncedRecurrenceRule = recurrenceRule;
+    const recurrence = [`RRULE:${recurrenceRule}`];
+    if (!eventStartMatchesRecurrence(event.recurrenceRule, event.startTime, event.allDay ? "UTC" : timeZone)) {
+      recurrence.push(event.allDay
+        ? `RDATE;VALUE=DATE:${dateOnly(event.startTime).replace(/-/g, "")}`
+        : `RDATE:${event.startTime.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`);
+    }
+    body.recurrence = recurrence;
+  } else if (!event.parentEventId) {
+    body.recurrence = [];
   }
 
   return body;

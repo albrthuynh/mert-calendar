@@ -14,6 +14,7 @@ import {
 import {
   expandRecurringEventForRange,
   normalizeTimeZone,
+  validateEventSchedule,
   type RecurringEventResponseItem,
 } from "@/lib/recurringEvents";
 import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
@@ -200,6 +201,16 @@ export async function POST(req: NextRequest) {
       { error: "title, startTime, endTime are required" },
       { status: 400 }
     );
+  }
+
+  try {
+    validateEventSchedule({
+      startTime: new Date(startTime), endTime: new Date(endTime), allDay: allDay ?? false,
+      recurrenceRule: recurrenceRule || null,
+      recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : null,
+    }, normalizeTimeZone(typeof timeZone === "string" ? timeZone : null));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid event schedule" }, { status: 400 });
   }
 
   const cleanReminderDisabled =

@@ -74,19 +74,42 @@ describe("Google Calendar recurrence end date round trip", () => {
     ]);
   });
 
-  it("replaces an earlier embedded cutoff when the end date is extended across DST", async () => {
+  it("extends a selected end date across DST", async () => {
     const { googleEvent, importedEvent } = await pushAndSync({
-      ...copiedEvent, recurrenceRule: "FREQ=DAILY;UNTIL=20261024T045959Z",
+      ...copiedEvent,
       recurrenceEndDate: new Date("2026-11-02T00:00:00.000Z"),
     });
     expect(googleEvent.recurrence).toEqual(["RRULE:FREQ=DAILY;UNTIL=20261103T055959Z"]);
     expect(importedEvent.recurrenceEndDate).toEqual(new Date("2026-11-02T00:00:00.000Z"));
   });
 
+  it("preserves a copied count limit and its separate ends-on date through sync", async () => {
+    const { googleEvent, importedEvent } = await pushAndSync({ ...copiedEvent, recurrenceRule: "FREQ=DAILY;COUNT=1" });
+    expect(googleEvent.recurrence).toEqual(["RRULE:FREQ=DAILY;UNTIL=20261024T040000Z"]);
+    expect(importedEvent.recurrenceRule).toBe("FREQ=DAILY;COUNT=1");
+    expect(importedEvent.recurrenceEndDate).toEqual(copiedEvent.recurrenceEndDate);
+  });
+
   it("keeps the series unbounded after clearing the selected end date", async () => {
     const { googleEvent, importedEvent } = await pushAndSync({ ...copiedEvent, recurrenceEndDate: null });
     expect(googleEvent.recurrence).toEqual(["RRULE:FREQ=DAILY"]);
     expect(importedEvent.recurrenceEndDate).toBeNull();
+  });
+
+  it("keeps a copy on its chosen day without shifting its original weekday schedule", async () => {
+    const { googleEvent, importedEvent } = await pushAndSync({ ...copiedEvent, recurrenceRule: "FREQ=WEEKLY;BYDAY=MO" });
+    expect(googleEvent.recurrence).toEqual([
+      "RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261026T045959Z", "RDATE:20261024T040000Z",
+    ]);
+    expect(importedEvent.recurrenceRule).toBe("FREQ=WEEKLY;BYDAY=MO");
+    const events = expandRecurringEventForRange({ ...copiedEvent, ...importedEvent },
+      new Date("2026-10-23T05:00:00.000Z"), new Date("2026-10-24T05:00:00.000Z"), "America/Chicago");
+    expect(events).toHaveLength(1);
+  });
+
+  it("clears Google's recurrence when a copied series is changed to a one-off event", async () => {
+    const { googleEvent } = await pushAndSync({ ...copiedEvent, recurrenceRule: null, recurrenceEndDate: null });
+    expect(googleEvent.recurrence).toEqual([]);
   });
 
   it("uses a date-only UNTIL for an all-day event", async () => {

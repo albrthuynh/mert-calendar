@@ -6,6 +6,7 @@ import { CalendarEvent } from "@/types/calendar";
 import { ColorPicker } from "./ColorPicker";
 import { RecurrenceSelector } from "./RecurrenceSelector";
 import { DesktopDateTimeInput } from "./DesktopDateTimeInput";
+import { getRecurrenceEndDateInputValue } from "@/lib/eventRecurrenceLabel";
 
 interface EventFormModalProps {
   initialDate?: Date;
@@ -55,11 +56,8 @@ export function EventFormModal({
   const [recurrenceRule, setRecurrenceRule] = useState(
     event?.recurrenceRule ?? ""
   );
-  const [recurrenceEndDate, setRecurrenceEndDate] = useState(
-    event?.recurrenceEndDate
-      ? event.recurrenceEndDate.slice(0, 10)
-      : ""
-  );
+  const initialRecurrenceEndDate = getRecurrenceEndDateInputValue(event?.recurrenceRule ?? null, event?.recurrenceEndDate ?? null);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(initialRecurrenceEndDate);
   const [editScope, setEditScope] = useState<"single" | "series" | null>(null);
   const [reminderChoice, setReminderChoice] = useState<string>(() => {
     if (event?.reminderDisabled) return "none";
@@ -122,6 +120,16 @@ export function EventFormModal({
         reminderMinutes = Math.trunc(n);
       }
 
+      const recurrenceScheduleChanged = recurrenceEndDate !== initialRecurrenceEndDate || recurrenceRule !== (event?.recurrenceRule ?? "");
+      if (canChooseRecurringEditScope && editScope === "single" && recurrenceScheduleChanged) {
+        throw new Error("Choose the entire series to change its repeat schedule or end date.");
+      }
+      let savedRecurrenceRule = recurrenceRule;
+      if (recurrenceScheduleChanged) {
+        savedRecurrenceRule = recurrenceRule.split(";").filter(
+          (part) => !part.startsWith("UNTIL=") && !part.startsWith("COUNT=")
+        ).join(";");
+      }
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
@@ -129,11 +137,11 @@ export function EventFormModal({
         startTime: new Date(startTime).toISOString(),
         endTime: new Date(endTime).toISOString(),
         color,
-        allDay: false,
-        recurrenceRule: recurrenceRule || null,
-        recurrenceEndDate: recurrenceEndDate
-          ? new Date(recurrenceEndDate).toISOString()
-          : null,
+        allDay: event?.allDay ?? false,
+        recurrenceRule: savedRecurrenceRule || null,
+        recurrenceEndDate: !recurrenceScheduleChanged && event
+          ? event.recurrenceEndDate
+          : recurrenceEndDate ? new Date(recurrenceEndDate).toISOString() : null,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         reminderMinutes,
         reminderDisabled,

@@ -186,6 +186,68 @@ export function recurrenceEndToUtcDayEnd(date: Date, timeZone: string) {
   return wallPartsToUtcDate(wallDateToParts(recurrenceEndToWallDayEnd(date)), timeZone);
 }
 
+export function validateEventSchedule(event: {
+  startTime: Date;
+  endTime: Date;
+  recurrenceRule: string | null;
+  recurrenceEndDate: Date | null;
+  allDay?: boolean;
+}, timeZone: string) {
+  if (!Number.isFinite(event.startTime.getTime()) || !Number.isFinite(event.endTime.getTime())) {
+    throw new Error("Start and end must be valid dates.");
+  }
+  if (event.endTime <= event.startTime) throw new Error("End time must be after start time.");
+  if (!event.recurrenceRule) return;
+  const wallStart = event.allDay ? event.startTime : dateToWallDate(event.startTime, timeZone);
+  if (event.recurrenceEndDate) {
+    if (!Number.isFinite(event.recurrenceEndDate.getTime())) throw new Error("Choose a valid repeat end date.");
+    if (recurrenceEndToWallDayEnd(event.recurrenceEndDate) < wallStart) {
+      throw new Error("The repeat end date must be on or after the event's start date.");
+    }
+  }
+  let recurrence: RRule;
+  try {
+    const options = RRule.parseString(event.recurrenceRule);
+    if (options.freq === undefined) throw new Error("Missing frequency");
+    if (options.count !== undefined && options.count !== null && (!Number.isInteger(options.count) || options.count <= 0)) {
+      throw new Error("Invalid count");
+    }
+    recurrence = new RRule({ ...options, dtstart: wallStart });
+  } catch {
+    throw new Error("Choose a valid repeat schedule.");
+  }
+  const until = recurrence.options.until;
+  if (until && until < wallStart) {
+    throw new Error("This repeat schedule has no occurrences on or after the event's start date. Choose a later repeat end date.");
+  }
+}
+
+export function eventStartMatchesRecurrence(rule: string, startTime: Date, timeZone: string) {
+  const wallStart = dateToWallDate(startTime, timeZone);
+  const recurrence = new RRule({ ...RRule.parseString(rule), dtstart: wallStart });
+  return recurrence.after(wallStart, true)?.getTime() === wallStart.getTime();
+}
+
+export function getLastRecurrenceStartBeforeDate(rule: string, startTime: Date, endDate: Date, timeZone: string) {
+  const recurrence = new RRule({ ...RRule.parseString(rule), dtstart: dateToWallDate(startTime, timeZone) });
+  const lastWallStart = recurrence.before(recurrenceEndToWallDayEnd(endDate), true);
+  return lastWallStart ? wallPartsToUtcDate(wallDateToParts(lastWallStart), timeZone) : null;
+}
+
+export function getSeriesEditTimes(
+  series: Pick<RecurringEventSeries, "startTime" | "endTime">,
+  instanceStart: Date,
+  editedStart: Date,
+  editedEnd: Date,
+  timeZone: string
+) {
+  if (!Number.isFinite(instanceStart.getTime())) throw new Error("Choose a valid series occurrence.");
+  const wallTimeShift = dateToWallDate(editedStart, timeZone).getTime() - dateToWallDate(instanceStart, timeZone).getTime();
+  const shiftedWallStart = new Date(dateToWallDate(series.startTime, timeZone).getTime() + wallTimeShift);
+  const startTime = wallPartsToUtcDate(wallDateToParts(shiftedWallStart), timeZone);
+  return { startTime, endTime: new Date(startTime.getTime() + editedEnd.getTime() - editedStart.getTime()) };
+}
+
 export function truncateSeriesBeforeInstance(
   event: Pick<RecurringEventSeries, "id" | "startTime" | "recurrenceRule" | "recurrenceEndDate">,
   instanceStart: Date,
@@ -198,6 +260,9 @@ export function truncateSeriesBeforeInstance(
     ...RRule.parseString(event.recurrenceRule),
     dtstart: dateToWallDate(event.startTime, timeZone),
   });
+  if (instanceStart.getTime() === event.startTime.getTime()) {
+    return { recurrenceRule: null, instanceStartTime: event.startTime, legacyInstanceId: makeInstanceId(event.id, event.startTime.toISOString()) };
+  }
   const selectedInstanceId = makeInstanceId(event.id, instanceStart.toISOString());
   const searchEnd = dateToWallDate(new Date(instanceStart.getTime() + 24 * 60 * 60 * 1000), timeZone);
   const recurrenceLimit = event.recurrenceEndDate
@@ -223,7 +288,7 @@ export function truncateSeriesBeforeInstance(
   );
   ruleParts.push(`COUNT=${precedingCount}`);
   return {
-    recurrenceRule: precedingCount === 0 ? null : ruleParts.join(";"),
+    recurrenceRule: precedingCount === 0 ? "FREQ=DAILY;COUNT=1" : ruleParts.join(";"),
     instanceStartTime: selectedIdentity.startTime,
     legacyInstanceId: selectedIdentity.legacyInstanceId,
   };
@@ -289,6 +354,16 @@ export function expandRecurringEventForRange(
     ? []
     : rule.between(wallRangeStart, occurrenceEnd, true);
   const occurrenceWallTimes = new Set(occurrences.map((occurrence) => occurrence.getTime()));
+  const wallSeriesStart = dateToWallDate(event.startTime, timeZone);
+  // The chosen start is an occurrence even when a copied rule names other weekdays.
+  if (
+    wallSeriesStart >= wallRangeStart && wallSeriesStart <= occurrenceEnd &&
+    (!rule.options.until || wallSeriesStart <= rule.options.until) &&
+    !occurrenceWallTimes.has(wallSeriesStart.getTime())
+  ) {
+    occurrences.unshift(wallSeriesStart);
+    occurrenceWallTimes.add(wallSeriesStart.getTime());
+  }
 
   // A day request may exclude the original date of an occurrence moved into that day.
   // Resolve its original rule occurrence so week/day results retain the same identity.
@@ -312,6 +387,9 @@ export function expandRecurringEventForRange(
       new Date(originalWallTime + lookupWindowMs),
       true
     );
+    if (wallSeriesStart >= new Date(originalWallTime - lookupWindowMs) && wallSeriesStart <= new Date(originalWallTime + lookupWindowMs)) {
+      candidates.push(wallSeriesStart);
+    }
     for (const candidate of candidates) {
       if (recurrenceLimit && candidate > recurrenceLimit) continue;
       const { instanceId, legacyInstanceId } = getOccurrenceIdentity(event, candidate, timeZone);

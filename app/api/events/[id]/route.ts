@@ -8,7 +8,7 @@ import {
   pushLocalEventToGoogle,
 } from "@/lib/googleCalendar";
 import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
-import { normalizeTimeZone, truncateSeriesBeforeInstance } from "@/lib/recurringEvents";
+import { getSeriesEditTimes, normalizeTimeZone, truncateSeriesBeforeInstance, validateEventSchedule } from "@/lib/recurringEvents";
 
 function makeInstanceId(seriesId: string, instanceStartTimeIso: string) {
   return `${seriesId}__${instanceStartTimeIso}`;
@@ -151,6 +151,16 @@ export async function PUT(
       );
     }
 
+    try {
+      validateEventSchedule({
+        startTime: startTime ? new Date(startTime) : instanceStart,
+        endTime: endTime ? new Date(endTime) : new Date(instanceStart.getTime() + seriesDurationMs),
+        recurrenceRule: null, recurrenceEndDate: null,
+      }, normalizeTimeZone(typeof timeZone === "string" ? timeZone : null));
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid event schedule" }, { status: 400 });
+    }
+
     const override = await prisma.event.upsert({
       where: { instanceId },
       update: {
@@ -241,15 +251,26 @@ export async function PUT(
     );
   }
 
-  // Series-wide edit must drop per-occurrence overrides; otherwise GET still prefers
-  // child rows and the updated master never shows for those instances.
-  if (editScope === "series" && existing.recurrenceRule) {
-    await prisma.event.deleteMany({
-      where: { parentEventId: existing.id },
-    });
+  const scheduleTimeZone = normalizeTimeZone(typeof timeZone === "string" ? timeZone : null);
+  let scheduleTimes = {
+    startTime: startTime === undefined ? existing.startTime : new Date(startTime),
+    endTime: endTime === undefined ? existing.endTime : new Date(endTime),
+  };
+  try {
+    if (editScope === "series" && existing.recurrenceRule && instanceStartTime && startTime !== undefined && endTime !== undefined) {
+      scheduleTimes = getSeriesEditTimes(existing, new Date(instanceStartTime), scheduleTimes.startTime, scheduleTimes.endTime, scheduleTimeZone);
+    }
+    validateEventSchedule({
+      ...scheduleTimes,
+      allDay: allDay === undefined ? existing.allDay : allDay,
+      recurrenceRule: recurrenceRule === undefined ? existing.recurrenceRule : recurrenceRule || null,
+      recurrenceEndDate: recurrenceEndDate === undefined ? existing.recurrenceEndDate : recurrenceEndDate ? new Date(recurrenceEndDate) : null,
+    }, scheduleTimeZone);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid event schedule" }, { status: 400 });
   }
 
-  const updated = await prisma.event.update({
+  const updateRequest = prisma.event.update({
     where: { id },
     data: {
       ...(title !== undefined && { title: title.trim() }),
@@ -257,8 +278,7 @@ export async function PUT(
         description: description?.trim() || null,
       }),
       ...(cleanLink !== undefined && { link: cleanLink }),
-      ...(startTime !== undefined && { startTime: new Date(startTime) }),
-      ...(endTime !== undefined && { endTime: new Date(endTime) }),
+      ...((startTime !== undefined || endTime !== undefined) && scheduleTimes),
       ...(color !== undefined && { color }),
       ...(allDay !== undefined && { allDay }),
       ...(recurrenceRule !== undefined && {
@@ -273,6 +293,17 @@ export async function PUT(
       ...(cleanReminderDisabled !== undefined && { reminderDisabled: cleanReminderDisabled }),
     },
   });
+  let updated;
+  if (editScope === "series" && existing.recurrenceRule) {
+    // Replace overrides atomically so a failed master update cannot erase occurrences.
+    const [, updatedSeries] = await prisma.$transaction([
+      prisma.event.deleteMany({ where: { parentEventId: existing.id } }),
+      updateRequest,
+    ]);
+    updated = updatedSeries;
+  } else {
+    updated = await updateRequest;
+  }
   await pushLocalEventToGoogle(session.user.id, updated.id, { timeZone }).catch((error) => {
     console.error("Google Calendar push failed", error);
   });
