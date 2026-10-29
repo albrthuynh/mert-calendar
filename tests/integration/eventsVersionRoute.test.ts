@@ -6,7 +6,7 @@ import { bumpUserDataVersion } from "@/lib/inMemoryCache";
 
 jest.mock("@/lib/auth", () => ({ auth: jest.fn() }));
 jest.mock("@/lib/prisma", () => ({ prisma: {
-  event: { findFirst: jest.fn(), count: jest.fn() },
+  user: { findUnique: jest.fn() },
 } }));
 jest.mock("@/lib/googleCalendar", () => ({ syncGoogleCalendarForUser: jest.fn() }));
 
@@ -18,37 +18,35 @@ describe("event version reads", () => {
     jest.clearAllMocks();
     userId = `version-user-${++userSequence}`;
     (auth as jest.Mock).mockResolvedValue({ user: { id: userId } });
-    (prisma.event.findFirst as jest.Mock).mockResolvedValue({ updatedAt: new Date("2026-10-28T12:00:00Z") });
-    (prisma.event.count as jest.Mock).mockResolvedValue(10);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ eventsRevision: BigInt(10) });
     (syncGoogleCalendarForUser as jest.Mock).mockResolvedValue({ changed: false });
   });
 
   it("reuses reads and sync work within the cache window", async () => {
     const responses = await Promise.all([GET(), GET()]);
-    expect(await responses[0].json()).toEqual({ version: "10:2026-10-28T12:00:00.000Z" });
+    expect(await responses[0].json()).toEqual({ version: "10" });
     await GET();
-    expect(prisma.event.findFirst).toHaveBeenCalledTimes(1);
-    expect(prisma.event.count).toHaveBeenCalledTimes(1);
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
     expect(syncGoogleCalendarForUser).toHaveBeenCalledTimes(1);
     expect(responses[0].headers.get("Cache-Control")).toBe("private, no-store");
   });
 
   it("checks again after mutations and detects deletion of an older event", async () => {
     const previous = await (await GET()).json();
-    (prisma.event.count as jest.Mock).mockResolvedValue(9);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ eventsRevision: BigInt(11) });
     bumpUserDataVersion("events", userId);
     const current = await (await GET()).json();
     expect(current.version).not.toBe(previous.version);
-    expect(prisma.event.count).toHaveBeenCalledTimes(2);
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
   });
 
   it("isolates user caches and rejects unauthenticated requests", async () => {
     await GET();
     (auth as jest.Mock).mockResolvedValue({ user: { id: `${userId}-other` } });
     await GET();
-    expect(prisma.event.count).toHaveBeenCalledTimes(2);
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
     (auth as jest.Mock).mockResolvedValue(null);
     expect((await GET()).status).toBe(401);
-    expect(prisma.event.count).toHaveBeenCalledTimes(2);
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
   });
 });

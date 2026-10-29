@@ -54,6 +54,8 @@ model User {
   accounts                 Account[]
   googleCalendarChannels   GoogleCalendarChannel[]
   googleCalendarSources    GoogleCalendarSource[]
+  /// Incremented transactionally by Event statement triggers; see event_revisions migration.
+  eventsRevision           BigInt    @default(0)
   events                   Event[]
   sessions                 Session[]
   todos                    Todo[]

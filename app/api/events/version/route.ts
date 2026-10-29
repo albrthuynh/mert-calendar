@@ -19,20 +19,12 @@ export async function GET() {
       console.error("Google Calendar auto-sync failed", error);
     });
 
-    const [latestEvent, eventCount] = await Promise.all([
-      prisma.event.findFirst({
-        where: { userId },
-        orderBy: { updatedAt: "desc" },
-        select: { updatedAt: true },
-      }),
-      prisma.event.count({
-        where: { userId },
-      }),
-    ]);
-
-    const latestUpdatedAt = latestEvent?.updatedAt.toISOString() ?? "none";
-
-    return [eventCount, latestUpdatedAt].join(":");
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { eventsRevision: true },
+    });
+    if (!user) throw new Error("User no longer exists");
+    return user.eventsRevision.toString();
   });
 
   return NextResponse.json({ version }, {

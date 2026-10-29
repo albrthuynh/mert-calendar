@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "jest --runInBand",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -44,7 +44,8 @@
     "jest-environment-jsdom": "^30.4.1",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@electric-sql/pglite": "0.4.3"
   },
   "overrides": {
     "@hono/node-server": "1.19.13",

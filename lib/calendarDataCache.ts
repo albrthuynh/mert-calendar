@@ -1,3 +1,4 @@
+import { BoundedCache } from "./boundedCache";
 import { buildEventsUrl } from "@/lib/eventFetchUrl";
 import type { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
 
@@ -17,7 +18,7 @@ type EventsVersionResponse = {
   version: string;
 };
 
-const cache = new Map<string, CacheEntry<unknown>>();
+const cache = new BoundedCache<CacheEntry<unknown>>(96);
 let knownEventsVersion: string | null = null;
 let eventsVersionInFlight: Promise<string> | null = null;
 
@@ -49,10 +50,11 @@ async function fetchJson<T>(
       return (await res.json()) as T;
     })
     .then((data) => {
+      if (cache.get(key)?.inFlight !== request) return data;
       cache.set(key, {
         data,
         expiresAt: Date.now() + CALENDAR_DATA_CACHE_TTL_MS,
-      });
+      }, CALENDAR_DATA_CACHE_TTL_MS);
       return data;
     })
     .finally(() => {
@@ -66,7 +68,7 @@ async function fetchJson<T>(
     data: existing?.data,
     expiresAt: existing?.expiresAt ?? 0,
     inFlight: request,
-  });
+  }, CALENDAR_DATA_CACHE_TTL_MS);
 
   return request;
 }

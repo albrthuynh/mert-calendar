@@ -1,3 +1,4 @@
+import { BoundedCache } from "./boundedCache";
 export type CacheScope = "events" | "todos" | "importantDays";
 
 type CacheEntry = {
@@ -6,21 +7,23 @@ type CacheEntry = {
 };
 
 type InMemoryCacheStore = {
-  entries: Map<string, CacheEntry>;
-  versions: Map<string, number>;
+  entries: BoundedCache<CacheEntry>;
+  versions: BoundedCache<number>;
+  nextVersion: number;
 };
 
 declare global {
-  var __mertInMemoryCacheStore: InMemoryCacheStore | undefined;
+  var __calendarBoundedCacheStoreV2: InMemoryCacheStore | undefined;
 }
 
-const cacheStore: InMemoryCacheStore = globalThis.__mertInMemoryCacheStore ?? {
-  entries: new Map<string, CacheEntry>(),
-  versions: new Map<string, number>(),
+const cacheStore: InMemoryCacheStore = globalThis.__calendarBoundedCacheStoreV2 ?? {
+  entries: new BoundedCache<CacheEntry>(512),
+  versions: new BoundedCache<number>(1024),
+  nextVersion: 0,
 };
 
-if (!globalThis.__mertInMemoryCacheStore) {
-  globalThis.__mertInMemoryCacheStore = cacheStore;
+if (!globalThis.__calendarBoundedCacheStoreV2) {
+  globalThis.__calendarBoundedCacheStoreV2 = cacheStore;
 }
 
 function getVersionKey(scope: CacheScope, userId: string) {
@@ -28,12 +31,13 @@ function getVersionKey(scope: CacheScope, userId: string) {
 }
 
 export function getUserDataVersion(scope: CacheScope, userId: string): number {
-  return cacheStore.versions.get(getVersionKey(scope, userId)) ?? 0;
+  return cacheStore.versions.get(getVersionKey(scope, userId)) ?? bumpUserDataVersion(scope, userId);
 }
 
 export function bumpUserDataVersion(scope: CacheScope, userId: string): number {
-  const nextVersion = getUserDataVersion(scope, userId) + 1;
-  cacheStore.versions.set(getVersionKey(scope, userId), nextVersion);
+  // Never reuse a generation after its entry is evicted.
+  const nextVersion = ++cacheStore.nextVersion;
+  cacheStore.versions.set(getVersionKey(scope, userId), nextVersion, 24 * 60 * 60 * 1000);
   return nextVersion;
 }
 
@@ -53,7 +57,7 @@ export function writeInMemoryCache(key: string, value: unknown, ttlMs: number): 
   cacheStore.entries.set(key, {
     value,
     expiresAt: Date.now() + Math.max(1, ttlMs),
-  });
+  }, ttlMs);
 }
 
 const pendingLoads = new Map<string, Promise<unknown>>();

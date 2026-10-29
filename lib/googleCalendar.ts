@@ -906,6 +906,13 @@ async function upsertGoogleEvent(
       googleEventId: googleEvent.id,
     },
   });
+  // Only skip a known mapping; a missing parent mapping still needs reconciliation.
+  if (existingByGoogleId && googleEvent.etag &&
+      existingByGoogleId.googleEtag === googleEvent.etag &&
+      !existingByGoogleId.deleted &&
+      (!googleEvent.recurringEventId || existingByGoogleId.parentEventId)) {
+    return false;
+  }
   const linkedLocalEvent = linkedLocalId
     ? await prisma.event.findFirst({ where: { id: linkedLocalId, userId } })
     : null;

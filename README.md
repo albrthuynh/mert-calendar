@@ -154,3 +154,21 @@ I wanted a calendar that feels better to look at and nicer to use day-to-day.
 Google Calendar is powerful, but I wanted something more personal, a little prettier, and tightly connected to daily tasks.
 
 If a feature seems oddly specific, there is a good chance someone in my inner circle requested it and I folded immediately.
+
+### Calendar performance migration
+
+Before deploying the revision-based calendar reads, apply migrations with
+`npx prisma migrate deploy`, then generate the client with `npx prisma generate`.
+The `20261029000000_event_revisions` migration adds a per-user revision and
+PostgreSQL statement triggers. Event inserts, updates, and deletes advance the
+revision in the same transaction, including bulk operations and Google imports.
+Use migrations rather than `prisma db push`: the triggers are defined in SQL.
+
+Calendar range caches include the persistent revision so changes made by another
+server instance invalidate old results. Version checks retain a 60-second cache.
+The browser retains up to 96 calendar ranges; the server retains up to 512 read
+results. Recurring override queries include both current overlap and original
+occurrence identity, preserving moved-out occurrences and cancellations.
+
+`npm test` includes an isolated PGlite PostgreSQL test of the migration, including
+bulk writes and rollback. It does not connect to the configured production database.

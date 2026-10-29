@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import {
   bumpUserDataVersion,
   getOrSetInMemoryCache,
-  getUserDataVersion,
 } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
 import {
@@ -65,9 +64,33 @@ async function loadEventsForRange(
           },
         ],
       },
-      include: { childEvents: true },
+
     }),
   ]);
+
+  // Legacy occurrence keys retain the series' original UTC hour across DST.
+  const identityStart = new Date(rangeStart.getTime() - 2 * 86400000).toISOString();
+  const identityEnd = new Date(rangeEnd.getTime() + 2 * 86400000).toISOString();
+  const overrides = seriesEvents.length ? await prisma.event.findMany({
+    where: {
+      userId,
+      parentEventId: { in: seriesEvents.map((series) => series.id) },
+      OR: [
+        { startTime: { lte: rangeEnd }, endTime: { gt: rangeStart } },
+        ...seriesEvents.map((series) => ({ instanceId: {
+          gte: `${series.id}__${identityStart}`,
+          lte: `${series.id}__${identityEnd}`,
+        } })),
+      ],
+    },
+  }) : [];
+  const overridesByParent = new Map<string, typeof overrides>();
+  for (const override of overrides) {
+    if (!override.parentEventId) continue;
+    const children = overridesByParent.get(override.parentEventId) ?? [];
+    children.push(override);
+    overridesByParent.set(override.parentEventId, children);
+  }
 
   // Expand recurring events into occurrences within range
   const result: EventResponseItem[] = [];
@@ -91,7 +114,7 @@ async function loadEventsForRange(
     // Expand recurring event
     try {
       result.push(
-        ...expandRecurringEventForRange(event, rangeStart, rangeEnd, timeZone)
+        ...expandRecurringEventForRange({ ...event, childEvents: overridesByParent.get(event.id) ?? [] }, rangeStart, rangeEnd, timeZone)
       );
     } catch {
       // If rrule fails, fall back to showing original
@@ -144,7 +167,12 @@ export async function GET(req: NextRequest) {
     console.error("Google Calendar auto-sync failed", error);
   });
 
-  const version = getUserDataVersion("events", session.user.id);
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { eventsRevision: true },
+  });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const version = user.eventsRevision.toString();
   const cacheKey = [
     "events",
     session.user.id,
