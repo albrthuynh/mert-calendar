@@ -1,5 +1,7 @@
 "use client";
 
+import { useCalendarEventRefresh } from "../hooks/useCalendarEventRefresh";
+
 import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import {
   startOfMonth,
@@ -33,7 +35,6 @@ import {
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
 import {
-  eventsVersionChanged,
   fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
@@ -198,34 +199,13 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     [popoverEvent]
   );
 
+  const fetchStartIso = fetchStart.toISOString();
+  const fetchEndIso = fetchEnd.toISOString();
   const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
-    const start = fetchStart.toISOString();
-    const end = fetchEnd.toISOString();
-    setEvents(await fetchEventsForRange(start, end, options));
-  }, [fetchStart, fetchEnd]);
+    setEvents(await fetchEventsForRange(fetchStartIso, fetchEndIso, options));
+  }, [fetchStartIso, fetchEndIso]);
 
-  useEffect(() => {
-    const checkForEventChanges = async () => {
-      try {
-        if (await eventsVersionChanged()) {
-          invalidateEventsCache();
-          await refreshEvents({ force: true });
-        }
-      } catch {
-        // Keep the current calendar visible if a background freshness check fails.
-      }
-    };
-    const handleEventsUpdated = () => {
-      invalidateEventsCache();
-      void refreshEvents({ force: true });
-    };
-    const interval = window.setInterval(checkForEventChanges, 10000);
-    window.addEventListener("mert-calendar:events-updated", handleEventsUpdated);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("mert-calendar:events-updated", handleEventsUpdated);
-    };
-  }, [refreshEvents]);
+  useCalendarEventRefresh(refreshEvents);
 
   const handleCopyEventToDate = useCallback(
     async (event: CalendarEvent, targetDay: Date) => {

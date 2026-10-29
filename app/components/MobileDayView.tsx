@@ -1,5 +1,7 @@
 "use client";
 
+import { useCalendarEventRefresh } from "../hooks/useCalendarEventRefresh";
+
 import {
   useState,
   useEffect,
@@ -50,7 +52,6 @@ import {
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
 import {
-  eventsVersionChanged,
   fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
@@ -267,28 +268,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     setEvents(await fetchEventsForRange(start, end, options));
   }, [calendarMode, currentDay]);
 
-  useEffect(() => {
-    const checkForEventChanges = async () => {
-      try {
-        if (await eventsVersionChanged()) {
-          invalidateEventsCache();
-          await refreshEvents({ force: true });
-        }
-      } catch {
-        // Keep the current calendar visible if a background freshness check fails.
-      }
-    };
-    const handleEventsUpdated = () => {
-      invalidateEventsCache();
-      void refreshEvents({ force: true });
-    };
-    const interval = window.setInterval(checkForEventChanges, 10000);
-    window.addEventListener("mert-calendar:events-updated", handleEventsUpdated);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("mert-calendar:events-updated", handleEventsUpdated);
-    };
-  }, [refreshEvents]);
+  useCalendarEventRefresh(refreshEvents);
 
   const handleCopyEventToDate = useCallback(
     async (event: CalendarEvent, targetDay: Date) => {

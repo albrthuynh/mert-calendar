@@ -1073,6 +1073,7 @@ export async function syncGoogleCalendarForUser(
     throw new GoogleCalendarSyncError("User not found.", 404);
   }
   if (!user.googleCalendarSyncEnabled && !options.force) {
+    writeInMemoryCache(cooldownKey, true, AUTO_SYNC_COOLDOWN_MS);
     return { changed: false, skipped: true };
   }
   if (!options.force && user.googleCalendarLastSyncedAt) {

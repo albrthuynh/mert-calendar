@@ -36,7 +36,6 @@ import {
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
 import {
-  eventsVersionChanged,
   fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
@@ -47,6 +46,7 @@ import {
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
+import { useCalendarEventRefresh } from "../hooks/useCalendarEventRefresh";
 import { useLiveNow } from "../hooks/useLiveNow";
 
 export { HOUR_HEIGHT };
@@ -396,28 +396,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     setEvents(await fetchEventsForRange(start, end, options));
   }, [weekStart, weekEnd]);
 
-  useEffect(() => {
-    const checkForEventChanges = async () => {
-      try {
-        if (await eventsVersionChanged()) {
-          invalidateEventsCache();
-          await refreshEvents({ force: true });
-        }
-      } catch {
-        // Keep the current calendar visible if a background freshness check fails.
-      }
-    };
-    const handleEventsUpdated = () => {
-      invalidateEventsCache();
-      void refreshEvents({ force: true });
-    };
-    const interval = window.setInterval(checkForEventChanges, 10000);
-    window.addEventListener("mert-calendar:events-updated", handleEventsUpdated);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("mert-calendar:events-updated", handleEventsUpdated);
-    };
-  }, [refreshEvents]);
+  useCalendarEventRefresh(refreshEvents);
 
   const handleCopyEventToDate = useCallback(
     async (event: CalendarEvent, targetDay: Date) => {

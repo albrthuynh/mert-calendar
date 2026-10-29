@@ -56,6 +56,8 @@ export function writeInMemoryCache(key: string, value: unknown, ttlMs: number): 
   });
 }
 
+const pendingLoads = new Map<string, Promise<unknown>>();
+
 export async function getOrSetInMemoryCache<T>(
   key: string,
   ttlMs: number,
@@ -66,7 +68,15 @@ export async function getOrSetInMemoryCache<T>(
     return cached;
   }
 
-  const freshValue = await loader();
-  writeInMemoryCache(key, freshValue, ttlMs);
-  return freshValue;
+  const pendingLoad = pendingLoads.get(key);
+  if (pendingLoad) return pendingLoad as Promise<T>;
+
+  const request = Promise.resolve().then(loader).then((freshValue) => {
+    writeInMemoryCache(key, freshValue, ttlMs);
+    return freshValue;
+  }).finally(() => {
+    pendingLoads.delete(key);
+  });
+  pendingLoads.set(key, request);
+  return request;
 }
