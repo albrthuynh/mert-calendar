@@ -190,3 +190,9 @@ been imported. Events on other Google calendars continue to follow their owners.
 For Mert-managed events, edit the schedule in Mert. Google changes and cancellations
 are restored from Mert, while guest lists and RSVP data remain in Google. Saved
 event time zones take priority over the browser's current zone on later syncs.
+
+Sync now also publishes active Mert events that do not have a Google mapping and
+recreates missing Google copies. Deleted Mert events, recurring overrides, and
+events imported from other read-only calendars are not published as standalone
+events. Creation uses a stable Google event ID so retrying after a failed local
+mapping write reuses the existing Google copy.

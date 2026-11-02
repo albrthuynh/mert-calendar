@@ -1,4 +1,4 @@
-import { pushLocalEventToGoogle, repairMertEventsInGoogle, syncGoogleCalendarForUser } from "@/lib/googleCalendar";
+import { handleGoogleCalendarWebhook, pushLocalEventToGoogle, repairMertEventsInGoogle, syncGoogleCalendarForUser } from "@/lib/googleCalendar";
 import { prisma } from "@/lib/prisma";
 import { expandRecurringEventForRange, type RecurringEventSeries } from "@/lib/recurringEvents";
 
@@ -152,6 +152,118 @@ describe("Google Calendar recurrence end date round trip", () => {
     expect(await repairMertEventsInGoogle("user-1", "America/Chicago")).toEqual({ repairedCount: 0 });
     expect(prisma.event.update).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes a Mert event with no Google mapping and updates its saved mapping", async () => {
+    const unpublished = { ...copiedEvent, googleEventId: null, googleCalendarId: null };
+    (prisma.event.findMany as jest.Mock).mockResolvedValue([unpublished]);
+    (prisma.event.findFirst as jest.Mock).mockResolvedValue(unpublished);
+    fetchMock.mockImplementation(async (_url, request) => Response.json({ ...JSON.parse(request.body), etag: "created" }));
+    expect(await repairMertEventsInGoogle("user-1", "America/Chicago")).toEqual({ repairedCount: 1 });
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    const published = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(published.id).toMatch(/^[0-9a-v]{64}$/);
+    expect(published.start.timeZone).toBe("America/Chicago");
+    expect(prisma.event.update).toHaveBeenCalledWith({ where: { id: unpublished.id }, data: expect.objectContaining({
+      googleEventId: published.id, googleManagedByMert: true,
+    }) });
+    expect(prisma.event.findMany).toHaveBeenCalledWith({ where: {
+      userId: "user-1", deleted: false, parentEventId: null,
+      OR: [{ googleCalendarId: null }, { googleCalendarId: "primary" }],
+    } });
+  });
+
+  it.each([404, 410])("recreates a Google copy returning %s even when legacy ownership is unknown", async (status) => {
+    (prisma.event.findMany as jest.Mock).mockResolvedValue([copiedEvent]);
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ error: { message: "Missing" } }, { status }))
+      .mockResolvedValueOnce(Response.json({ error: { message: "Missing" } }, { status }))
+      .mockResolvedValueOnce(Response.json({ id: "replacement", etag: "new" }));
+    expect(await repairMertEventsInGoogle("user-1", "America/Chicago")).toEqual({ repairedCount: 1 });
+    expect(fetchMock.mock.calls[2][1].method).toBe("POST");
+    expect(prisma.event.update).toHaveBeenCalledWith({ where: { id: copiedEvent.id }, data: expect.objectContaining({
+      googleEventId: "replacement", googleManagedByMert: true,
+    }) });
+  });
+
+  it("recovers a successful Google insert after the local mapping write failed without duplicating the event", async () => {
+    const unpublished = { ...copiedEvent, googleEventId: null, googleCalendarId: null };
+    (prisma.event.findFirst as jest.Mock).mockResolvedValue(unpublished);
+    (prisma.event.update as jest.Mock).mockRejectedValueOnce(new Error("Database unavailable")).mockResolvedValue(unpublished);
+    let remote: Record<string, unknown> | null = null;
+    fetchMock.mockImplementation(async (_url, request) => {
+      if (request?.method === "POST") {
+        if (remote) return Response.json({ error: { message: "Duplicate" } }, { status: 409 });
+        remote = JSON.parse(request.body);
+        return Response.json(remote);
+      }
+      if (request?.method === "PATCH") return Response.json({ ...remote, ...JSON.parse(request.body) });
+      return Response.json(remote);
+    });
+    await expect(pushLocalEventToGoogle("user-1", unpublished.id, { timeZone: "America/Chicago" })).rejects.toThrow("Database unavailable");
+    await pushLocalEventToGoogle("user-1", unpublished.id, { timeZone: "America/Chicago" });
+    const inserts = fetchMock.mock.calls.filter(([, request]) => request?.method === "POST");
+    expect(JSON.parse(inserts[0][1].body).id).toBe(JSON.parse(inserts[1][1].body).id);
+    expect((prisma.event.update as jest.Mock).mock.calls.at(-1)[0].data.googleEventId).toBe(JSON.parse(inserts[0][1].body).id);
+  });
+
+  it("reuses the Google copy without rewriting it when a newly published event is synced again", async () => {
+    const stored = { ...copiedEvent, googleEventId: null as string | null, googleCalendarId: null as string | null };
+    (prisma.event.findMany as jest.Mock).mockImplementation(async () => [{ ...stored }]);
+    (prisma.event.findFirst as jest.Mock).mockImplementation(async () => ({ ...stored }));
+    (prisma.event.update as jest.Mock).mockImplementation(async ({ data }) => Object.assign(stored, data));
+    let remote: Record<string, unknown> = {};
+    fetchMock.mockImplementation(async (_url, request) => {
+      if (request?.body) remote = { id: stored.googleEventId, ...JSON.parse(request.body) };
+      return Response.json(remote);
+    });
+    await repairMertEventsInGoogle("user-1", "America/Chicago");
+    await repairMertEventsInGoogle("user-1", "America/Chicago");
+    expect(fetchMock.mock.calls.map(([, request]) => request.method)).toEqual(["POST", undefined]);
+    expect(fetchMock.mock.calls[1][0]).toContain(`/events/${stored.googleEventId}`);
+  });
+
+  it("backs off and retries Google's rate-limit response", async () => {
+    jest.useFakeTimers();
+    const jitter = jest.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      fetchMock.mockResolvedValueOnce(Response.json({ error: { errors: [{ reason: "rateLimitExceeded" }] } }, { status: 403 }))
+        .mockResolvedValueOnce(Response.json({ id: "google-copy" }));
+      const pushing = pushLocalEventToGoogle("user-1", copiedEvent.id, { timeZone: "America/Chicago" });
+      await jest.advanceTimersByTimeAsync(1000);
+      await expect(pushing).resolves.toMatchObject({ id: "google-copy" });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      jitter.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not retry a permission error as a rate limit", async () => {
+    fetchMock.mockResolvedValue(Response.json({ error: { message: "Forbidden", errors: [{ reason: "forbidden" }] } }, { status: 403 }));
+    await expect(pushLocalEventToGoogle("user-1", copiedEvent.id, { timeZone: "America/Chicago" })).rejects.toThrow("Forbidden");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not force a fresh sync for webhook notifications received during the cooldown", async () => {
+    const previousWebhookUrl = process.env.GOOGLE_CALENDAR_WEBHOOK_URL;
+    process.env.GOOGLE_CALENDAR_WEBHOOK_URL = "https://example.com/api/google-calendar/webhook";
+    try {
+      (prisma.googleCalendarChannel.findFirst as jest.Mock).mockResolvedValue({
+        id: "channel", userId: "webhook-cooldown-user", calendarId: "primary",
+        expiration: new Date(Date.now() + 3 * 86400000),
+      });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        googleCalendarSyncEnabled: true, googleCalendarLastSyncedAt: new Date(),
+      });
+      await expect(handleGoogleCalendarWebhook(new Headers({
+        "x-goog-channel-id": "channel", "x-goog-channel-token": "token", "x-goog-resource-state": "exists",
+      }))).resolves.toMatchObject({ synced: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (previousWebhookUrl === undefined) delete process.env.GOOGLE_CALENDAR_WEBHOOK_URL;
+      else process.env.GOOGLE_CALENDAR_WEBHOOK_URL = previousWebhookUrl;
+    }
   });
 
   it.each(["confirmed", "cancelled"])("restores Mert's schedule when a Google copy is %s", async (status) => {

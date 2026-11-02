@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
-import { randomBytes, randomUUID } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { normalizeGuestEmails, type EventGuestScope } from "@/lib/eventGuests";
 import { eventStartMatchesRecurrence, findRecurringInstanceIdentity, getLastRecurrenceStartBeforeDate, normalizeTimeZone, recurrenceEndToUtcDayEnd } from "@/lib/recurringEvents";
 
@@ -346,7 +346,8 @@ async function googleCalendarFetch<T>(
   userId: string,
   path: string,
   init: RequestInit = {},
-  retry = true
+  retry = true,
+  rateLimitAttempt = 0
 ): Promise<T> {
   const accessToken = await getGoogleAccessToken(userId, !retry);
   const res = await fetch(`${GOOGLE_API_BASE}${path}`, {
@@ -359,7 +360,7 @@ async function googleCalendarFetch<T>(
   });
 
   if (res.status === 401 && retry) {
-    return googleCalendarFetch<T>(userId, path, init, false);
+    return googleCalendarFetch<T>(userId, path, init, false, rateLimitAttempt);
   }
   if (res.status === 401) {
     throw new GoogleCalendarSyncError(
@@ -373,6 +374,17 @@ async function googleCalendarFetch<T>(
 
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
+    const rateLimited = res.status === 429 || (res.status === 403 &&
+      payload?.error?.errors?.some((error: { reason?: string }) =>
+        error.reason === "rateLimitExceeded" || error.reason === "userRateLimitExceeded"
+      ));
+    if (rateLimited && rateLimitAttempt < 4) {
+      const retryAfterSeconds = Number(res.headers.get("Retry-After"));
+      const backoffMs = 1000 * 2 ** rateLimitAttempt + Math.random() * 1000;
+      const delayMs = Math.min(60000, Math.max(backoffMs, retryAfterSeconds * 1000 || 0));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return googleCalendarFetch<T>(userId, path, init, retry, rateLimitAttempt + 1);
+    }
     const message =
       typeof payload?.error?.message === "string"
         ? payload.error.message
@@ -577,7 +589,8 @@ export async function handleGoogleCalendarWebhook(headers: Headers) {
     return { synced: false, resourceState };
   }
 
-  await syncGoogleCalendarForUser(channel.userId, { force: true });
+  // Our own writes also trigger webhooks; share the polling cooldown to avoid sync storms.
+  await syncGoogleCalendarForUser(channel.userId);
   await ensureGoogleCalendarWatch(channel.userId, channel.calendarId).catch(
     (error) => {
       console.error("Google Calendar watch renewal failed", error);
@@ -1214,30 +1227,75 @@ export async function repairMertEventsInGoogle(userId: string, timeZone: string)
   const events = await prisma.event.findMany({
     where: {
       userId, deleted: false, parentEventId: null,
-      googleCalendarId: GOOGLE_PRIMARY_CALENDAR_ID,
-      googleEventId: { not: null },
+      OR: [{ googleCalendarId: null }, { googleCalendarId: GOOGLE_PRIMARY_CALENDAR_ID }],
     },
   });
   let repairedCount = 0;
-  // Read each remote marker before publishing so Google-origin events remain imports.
+  events.sort((first, second) => Number(Boolean(first.googleEventId)) - Number(Boolean(second.googleEventId)));
+  // Existing Google-origin events remain imports; missing writable events need a copy.
   for (const event of events) {
-    let managedByMert = event.googleManagedByMert;
-    if (!managedByMert) {
+    let managedByMert = event.googleManagedByMert || !event.googleEventId;
+    if (event.googleEventId) {
       try {
         const remote = await googleCalendarFetch<GoogleCalendarEvent>(
           userId,
           `/calendars/primary/events/${encodeURIComponent(event.googleEventId!)}`
         );
-        managedByMert = remote.extendedProperties?.private?.mertEventId === event.id;
+        managedByMert = managedByMert || remote.status === "cancelled" || remote.extendedProperties?.private?.mertEventId === event.id;
+        const eventTimeZone = event.timeZone ?? normalizeTimeZone(timeZone);
+        const expected = localEventToGoogleBody(event, eventTimeZone);
+        // Most manual syncs need no write; PATCH costs more quota than reading the copy.
+        if (managedByMert && remote.status !== "cancelled" &&
+            googleDateToDate(remote.start)?.getTime() === event.startTime.getTime() &&
+            googleDateToDate(remote.end)?.getTime() === event.endTime.getTime() &&
+            isGoogleAllDay(remote) === event.allDay &&
+            (event.allDay || !event.recurrenceRule || remote.start?.timeZone === eventTimeZone) &&
+            remote.summary === expected.summary && (remote.description ?? "") === (expected.description ?? "") &&
+            (!event.link || remote.location === expected.location) &&
+            JSON.stringify(remote.recurrence ?? []) === JSON.stringify(expected.recurrence ?? [])) {
+          if (!event.timeZone || !event.googleManagedByMert) {
+            await prisma.event.update({ where: { id: event.id }, data: { timeZone: eventTimeZone, googleManagedByMert: true } });
+          }
+          continue;
+        }
       } catch (error) {
-        if (error instanceof GoogleCalendarSyncError && (error.status === 404 || error.status === 410)) continue;
-        throw error;
+        if (error instanceof GoogleCalendarSyncError && (error.status === 404 || error.status === 410)) {
+          managedByMert = true;
+        } else {
+          throw error;
+        }
       }
     }
     if (!managedByMert) continue;
     if (await pushLocalEventToGoogle(userId, event.id, { timeZone })) repairedCount += 1;
   }
   return { repairedCount };
+}
+
+async function createMertGoogleEvent(
+  userId: string,
+  eventId: string,
+  previousGoogleEventId: string | null,
+  body: Record<string, unknown>
+) {
+  // A retried request must reuse its ID if Google saved it but the local write failed.
+  const googleEventId = createHash("sha256")
+    .update(JSON.stringify([userId, eventId, previousGoogleEventId]))
+    .digest("hex");
+  const eventsPath = "/calendars/primary/events";
+  try {
+    return await googleCalendarFetch<GoogleCalendarEvent>(userId, `${eventsPath}?conferenceDataVersion=1`, {
+      method: "POST", body: JSON.stringify({ ...body, id: googleEventId }),
+    });
+  } catch (error) {
+    if (!(error instanceof GoogleCalendarSyncError && error.status === 409)) throw error;
+    const resourcePath = `${eventsPath}/${googleEventId}`;
+    const existing = await googleCalendarFetch<GoogleCalendarEvent>(userId, resourcePath);
+    if (existing.extendedProperties?.private?.mertEventId !== eventId) throw error;
+    return googleCalendarFetch<GoogleCalendarEvent>(userId, `${resourcePath}?conferenceDataVersion=1`, {
+      method: "PATCH", body: JSON.stringify(body),
+    });
+  }
 }
 
 export async function pushLocalEventToGoogle(
@@ -1274,25 +1332,21 @@ export async function pushLocalEventToGoogle(
   const path = event.googleEventId
     ? `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`
     : `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events?${params.toString()}`;
-  const method = event.googleEventId ? "PATCH" : "POST";
 
   let googleEvent: GoogleCalendarEvent;
   try {
-    googleEvent = await googleCalendarFetch<GoogleCalendarEvent>(userId, path, {
-      method,
-      body: JSON.stringify(body),
-    });
+    googleEvent = event.googleEventId
+      ? await googleCalendarFetch<GoogleCalendarEvent>(userId, path, {
+          method: "PATCH", body: JSON.stringify(body),
+        })
+      : await createMertGoogleEvent(userId, event.id, null, body);
   } catch (error) {
     if (
       event.googleEventId &&
       error instanceof GoogleCalendarSyncError &&
       (error.status === 404 || error.status === 410)
     ) {
-      googleEvent = await googleCalendarFetch<GoogleCalendarEvent>(
-        userId,
-        `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events?${params.toString()}`,
-        { method: "POST", body: JSON.stringify(body) }
-      );
+      googleEvent = await createMertGoogleEvent(userId, event.id, event.googleEventId, body);
     } else {
       throw error;
     }

@@ -25,6 +25,9 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({}));
+    if (!status.enabled) {
+      await prisma.user.update({ where: { id: session.user.id }, data: { googleCalendarSyncEnabled: true } });
+    }
     const repair = typeof body?.timeZone === "string"
       ? await repairMertEventsInGoogle(session.user.id, body.timeZone)
       : { repairedCount: 0 };
