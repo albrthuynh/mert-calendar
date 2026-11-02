@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getBrowserTimeZone } from "@/lib/eventFetchUrl";
 import { playNotificationSound, normalizeSoundId } from "@/lib/notificationSound";
 import type { NotificationPreferences } from "../context/NotificationPreferencesContext";
 import { Copy, Check } from "lucide-react";
@@ -159,7 +160,7 @@ export function NotificationSettingsModal({ initial, onSave, onClose }: Props) {
   };
 
   const subscriptionUrl = subscriptionToken
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}`
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}?timeZone=${encodeURIComponent(getBrowserTimeZone())}`
     : null;
 
   const handleCopyUrl = async () => {
@@ -252,7 +253,9 @@ export function NotificationSettingsModal({ initial, onSave, onClose }: Props) {
                 Calendar Subscription (iOS/Android)
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Subscribe in Apple Calendar or Google Calendar for native notifications
+                Subscribe in Apple Calendar or Google Calendar for native notifications.
+                The subscription uses your current time zone and adjusts automatically
+                for daylight saving time.
               </p>
             </div>
             

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import ical, { ICalAlarmType } from "ical-generator";
-import { RRule } from "rrule";
+import { expandRecurringEventForRange, normalizeTimeZone } from "@/lib/recurringEvents";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+  // Older subscription URLs have no zone; new URLs carry an IANA zone, not a fixed offset.
+  const timeZone = normalizeTimeZone(req.nextUrl.searchParams.get("timeZone") ?? "UTC");
 
   if (!token) {
     return NextResponse.json({ error: "Token required" }, { status: 400 });
@@ -34,11 +36,6 @@ export async function GET(
   const now = new Date();
   const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
   const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const toInclusiveDayEnd = (date: Date) => {
-    const end = new Date(date);
-    end.setUTCHours(23, 59, 59, 999);
-    return end;
-  };
 
   const [standaloneEvents, seriesEvents] = await Promise.all([
     prisma.event.findMany({
@@ -107,99 +104,34 @@ export async function GET(
   // Add recurring events
   for (const event of seriesEvents) {
     try {
-      // Parse the recurrence rule
-      const rruleStr = `DTSTART:${event.startTime
-        .toISOString()
-        .replace(/[-:]/g, "")
-        .replace(/\.\d{3}/, "")}\nRRULE:${event.recurrenceRule}`;
+      const occurrences = expandRecurringEventForRange(
+        event,
+        oneMonthAgo,
+        oneYearFromNow,
+        event.allDay ? "UTC" : timeZone
+      );
 
-      const rule = RRule.fromString(rruleStr);
+      for (const occurrence of occurrences) {
+        const calEvent = calendar.createEvent({
+          id: occurrence.id === event.id
+            ? `${event.id}-${occurrence.instanceStartTime}`
+            : occurrence.id,
+          start: new Date(occurrence.startTime),
+          end: new Date(occurrence.endTime),
+          summary: occurrence.title,
+          description: occurrence.description || undefined,
+          url: occurrence.link || undefined,
+          allDay: occurrence.allDay,
+        });
 
-      // Create map of overrides by instanceId
-      const overridesByInstanceId = new Map<
-        string,
-        (typeof event.childEvents)[number]
-      >();
-      for (const child of event.childEvents) {
-        if (child.instanceId) {
-          overridesByInstanceId.set(child.instanceId, child);
-        }
-      }
-
-      // Generate occurrences for the 1-year window (respecting recurrenceEndDate)
-      const recurrenceLimit = event.recurrenceEndDate
-        ? toInclusiveDayEnd(event.recurrenceEndDate)
-        : null;
-      const occurrenceEnd =
-        recurrenceLimit && recurrenceLimit < oneYearFromNow
-          ? recurrenceLimit
-          : oneYearFromNow;
-      const occurrences =
-        occurrenceEnd < oneMonthAgo
-          ? []
-          : rule.between(oneMonthAgo, occurrenceEnd, true);
-      if (
-        event.startTime >= oneMonthAgo && event.startTime <= occurrenceEnd &&
-        (!rule.options.until || event.startTime <= rule.options.until) &&
-        !occurrences.some((occurrence) => occurrence.getTime() === event.startTime.getTime())
-      ) {
-        occurrences.unshift(event.startTime);
-      }
-      const durationMs = event.endTime.getTime() - event.startTime.getTime();
-
-      for (const occ of occurrences) {
-        const occStartIso = occ.toISOString();
-        const instanceId = `${event.id}__${occStartIso}`;
-        const override = overridesByInstanceId.get(instanceId);
-
-        // If there's an override, use its values
-        if (override) {
-          if (override.deleted) {
-            continue;
-          }
-
-          const calEvent = calendar.createEvent({
-            id: override.id,
-            start: override.startTime,
-            end: override.endTime,
-            summary: override.title,
-            description: override.description || undefined,
-            url: override.link || undefined,
-            allDay: override.allDay,
+        if (!occurrence.reminderDisabled) {
+          const reminderMinutes =
+            occurrence.reminderMinutes ?? user.defaultReminderMinutes;
+          calEvent.createAlarm({
+            type: ICalAlarmType.display,
+            trigger: reminderMinutes * 60,
+            description: `Reminder: ${occurrence.title}`,
           });
-
-          // Add reminder for override
-          if (!override.reminderDisabled) {
-            const reminderMinutes =
-              override.reminderMinutes ?? user.defaultReminderMinutes;
-            calEvent.createAlarm({
-              type: ICalAlarmType.display,
-              trigger: reminderMinutes * 60,
-              description: `Reminder: ${override.title}`,
-            });
-          }
-        } else {
-          // Use the series event values
-          const calEvent = calendar.createEvent({
-            id: `${event.id}-${occStartIso}`,
-            start: occ,
-            end: new Date(occ.getTime() + durationMs),
-            summary: event.title,
-            description: event.description || undefined,
-            url: event.link || undefined,
-            allDay: event.allDay,
-          });
-
-          // Add reminder for series
-          if (!event.reminderDisabled) {
-            const reminderMinutes =
-              event.reminderMinutes ?? user.defaultReminderMinutes;
-            calEvent.createAlarm({
-              type: ICalAlarmType.display,
-              trigger: reminderMinutes * 60,
-              description: `Reminder: ${event.title}`,
-            });
-          }
         }
       }
     } catch (error) {

@@ -13,6 +13,7 @@ import {
   User,
   X,
 } from "lucide-react";
+import { getBrowserTimeZone } from "@/lib/eventFetchUrl";
 import { playNotificationSound, normalizeSoundId } from "@/lib/notificationSound";
 import type { NotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useGoogleCalendarConnection } from "../context/GoogleCalendarConnectionContext";
@@ -262,7 +263,7 @@ export function SettingsModal({
   }
 
   const subscriptionUrl = subscriptionToken
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}`
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}?timeZone=${encodeURIComponent(getBrowserTimeZone())}`
     : null;
 
   const handleAppearanceSubmit = async (event: React.FormEvent) => {
@@ -815,7 +816,8 @@ export function SettingsModal({
                   </p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Subscribe in Apple Calendar or Google Calendar for native
-                    notifications.
+                    notifications. The subscription uses your current time zone
+                    and adjusts automatically for daylight saving time.
                   </p>
 
                   {loadingToken ? (

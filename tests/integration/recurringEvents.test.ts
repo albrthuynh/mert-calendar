@@ -215,6 +215,26 @@ describe("recurring event expansion", () => {
     }
   });
 
+  it.each([
+    ["spring forward", "2026-03-01T18:30:00.000Z", "2026-03-01T19:30:00.000Z", "2026-03-08T17:30:00.000Z"],
+    ["fall back", "2026-10-25T17:30:00.000Z", "2026-10-25T18:30:00.000Z", "2026-11-01T18:30:00.000Z"],
+  ])("keeps a 12:30 weekly event at 12:30 across %s", (_transition, startTime, endTime, nextStart) => {
+    const occurrences = expandRecurringEventForRange(
+      baseSeries({
+        startTime: new Date(startTime), endTime: new Date(endTime),
+        recurrenceRule: "FREQ=WEEKLY;COUNT=2", recurrenceEndDate: null,
+      }),
+      new Date(startTime),
+      new Date(new Date(nextStart).getTime() + 3600000),
+      timeZone
+    );
+
+    expect(occurrences.map((event) => event.startTime)).toEqual([startTime, nextStart]);
+    for (const occurrence of occurrences) {
+      expect(zonedParts(occurrence.startTime, timeZone)).toMatchObject({ hour: "12", minute: "30" });
+    }
+  });
+
   it("honors deleted overrides created with the old UTC-based instance key", () => {
     const legacyInstanceId = makeInstanceId(
       "series-1",
