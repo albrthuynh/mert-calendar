@@ -413,7 +413,11 @@ export function SettingsModal({
 
     setGoogleSyncing(true);
     try {
-      const res = await fetch("/api/google-calendar/sync", { method: "POST" });
+      const res = await fetch("/api/google-calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timeZone: getBrowserTimeZone() }),
+      });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         if (payload.requiresReconnect) {
@@ -909,7 +913,8 @@ export function SettingsModal({
                     Google Calendar sync
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Connect and sync events with your Google Calendar.
+                    Mert controls events it publishes to Google. Sync now also
+                    repairs those Google copies using Mert&apos;s schedule and time zone.
                   </p>
                 </section>
 

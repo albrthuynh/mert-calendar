@@ -38,4 +38,26 @@ describe("Google sync deduplication", () => {
     }
     expect(prisma.event.update).toHaveBeenCalledTimes(2);
   });
+
+  it("keeps other Google calendars authoritative even if an event carries Mert metadata", async () => {
+    const sourceId = "shared@example.com";
+    const sourceUpdate = jest.fn();
+    Object.assign(prisma.googleCalendarSource, { update: sourceUpdate });
+    (prisma.googleCalendarSource.findMany as jest.Mock).mockResolvedValue([{ id: "source", calendarId: sourceId }]);
+    (prisma.event.findFirst as jest.Mock).mockResolvedValue({ id: "local", googleManagedByMert: true });
+    (globalThis.fetch as jest.Mock).mockImplementation(async (url: string) => Response.json({ items: url.includes("/primary/") ? [] : [{
+      id: "google-event", summary: "Changed by owner",
+      start: { dateTime: "2026-11-02T18:30:00Z", timeZone: "America/Chicago" },
+      end: { dateTime: "2026-11-02T19:30:00Z", timeZone: "America/Chicago" },
+      extendedProperties: { private: { mertEventId: "local" } },
+    }] }));
+    await syncGoogleCalendarForUser("shared", { force: true });
+    expect(prisma.event.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      title: "Changed by owner", timeZone: "America/Chicago", googleCalendarId: sourceId,
+    }) }));
+    expect(sourceUpdate).toHaveBeenCalled();
+    for (const [, request] of (globalThis.fetch as jest.Mock).mock.calls) {
+      expect(request.method).not.toBe("PATCH");
+    }
+  });
 });

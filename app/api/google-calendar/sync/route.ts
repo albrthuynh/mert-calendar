@@ -5,10 +5,11 @@ import {
   getGoogleCalendarStatus,
   isGoogleCalendarSyncError,
   syncGoogleCalendarForUser,
+  repairMertEventsInGoogle,
 } from "@/lib/googleCalendar";
 import { prisma } from "@/lib/prisma";
 
-export async function POST() {
+export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,7 +24,11 @@ export async function POST() {
   }
 
   try {
-    const result = await syncGoogleCalendarForUser(session.user.id, { force: true });
+    const body = await req.json().catch(() => ({}));
+    const repair = typeof body?.timeZone === "string"
+      ? await repairMertEventsInGoogle(session.user.id, body.timeZone)
+      : { repairedCount: 0 };
+    const result = await syncGoogleCalendarForUser(session.user.id, { force: true, full: repair.repairedCount > 0 });
     const watch = await ensureGoogleCalendarWatches(session.user.id)
       .then((channel) => ({
         active: true,
@@ -37,7 +42,7 @@ export async function POST() {
             : "Google Calendar webhook setup failed.",
       }));
 
-    return NextResponse.json({ ...result, watch });
+    return NextResponse.json({ ...result, ...repair, watch });
   } catch (error) {
     const statusCode = isGoogleCalendarSyncError(error) ? error.status : 500;
     return NextResponse.json(

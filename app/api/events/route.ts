@@ -275,6 +275,7 @@ export async function POST(req: NextRequest) {
       link: cleanLink,
       startTime: new Date(startTime),
       endTime: new Date(endTime),
+      timeZone: normalizeTimeZone(typeof timeZone === "string" ? timeZone : null),
       color: color ?? "#4285F4",
       allDay: allDay ?? false,
       recurrenceRule: recurrenceRule || null,

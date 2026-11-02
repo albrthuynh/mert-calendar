@@ -43,6 +43,7 @@ export type RecurringEventSeries = {
   link: string | null;
   startTime: Date;
   endTime: Date;
+  timeZone?: string | null;
   color: string;
   allDay: boolean;
   recurrenceRule: string | null;
@@ -326,12 +327,34 @@ function getOccurrenceIdentity(
   };
 }
 
+export function findRecurringInstanceIdentity(
+  event: RecurringEventSeries,
+  originalStart: Date,
+  timeZone: string
+) {
+  timeZone = event.allDay ? "UTC" : event.timeZone ?? timeZone;
+  const instanceId = makeInstanceId(event.id, originalStart.toISOString());
+  const lookupWindowMs = 2 * 24 * 60 * 60 * 1000;
+  const occurrences = expandRecurringEventForRange(
+    { ...event, childEvents: [] },
+    new Date(originalStart.getTime() - lookupWindowMs),
+    new Date(originalStart.getTime() + lookupWindowMs),
+    timeZone
+  );
+  for (const occurrence of occurrences) {
+    const identity = getOccurrenceIdentity(event, dateToWallDate(new Date(occurrence.startTime), timeZone), timeZone);
+    if (identity.instanceId === instanceId || identity.legacyInstanceId === instanceId) return identity;
+  }
+  return null;
+}
+
 export function expandRecurringEventForRange(
   event: RecurringEventSeries,
   rangeStart: Date,
   rangeEnd: Date,
   timeZone: string
 ): RecurringEventResponseItem[] {
+  timeZone = event.allDay ? "UTC" : event.timeZone ?? timeZone;
   const recurrenceRule = event.recurrenceRule;
   if (!recurrenceRule) return [];
 

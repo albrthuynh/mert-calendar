@@ -1,0 +1,3 @@
+ALTER TABLE "Event"
+ADD COLUMN "timeZone" TEXT,
+ADD COLUMN "googleManagedByMert" BOOLEAN NOT NULL DEFAULT false;

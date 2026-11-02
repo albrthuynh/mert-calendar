@@ -154,6 +154,7 @@ model Event {
   link              String?
   startTime         DateTime
   endTime           DateTime
+  timeZone          String?
   color             String    @default("#4285F4")
   allDay            Boolean   @default(false)
   recurrenceRule    String?
@@ -166,6 +167,7 @@ model Event {
   googleEtag        String?
   googleUpdatedAt   DateTime?
   googleSyncedAt    DateTime?
+  googleManagedByMert Boolean @default(false)
   userId            String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

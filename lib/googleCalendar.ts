@@ -3,7 +3,7 @@ import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/li
 import { normalizeEventLink } from "@/lib/eventLink";
 import { randomBytes, randomUUID } from "crypto";
 import { normalizeGuestEmails, type EventGuestScope } from "@/lib/eventGuests";
-import { eventStartMatchesRecurrence, getLastRecurrenceStartBeforeDate, normalizeTimeZone, recurrenceEndToUtcDayEnd } from "@/lib/recurringEvents";
+import { eventStartMatchesRecurrence, findRecurringInstanceIdentity, getLastRecurrenceStartBeforeDate, normalizeTimeZone, recurrenceEndToUtcDayEnd } from "@/lib/recurringEvents";
 
 import {
   GOOGLE_PRIMARY_CALENDAR_ID,
@@ -746,11 +746,13 @@ function localEventToGoogleBody(event: {
 }, timeZone = "UTC") {
   const privateProperties = {
     mertEventId: event.id,
+    mertTimeZone: timeZone,
     mertRecurrenceEndDate: event.recurrenceRule && event.recurrenceEndDate ? event.recurrenceEndDate.toISOString() : "",
     mertRecurrenceRule: event.recurrenceRule ?? "",
     mertSyncedRecurrenceRule: "",
   };
   const body: Record<string, unknown> = {
+    status: "confirmed",
     summary: event.title,
     description: appendLinkToDescription(event.description, event.link),
     extendedProperties: {
@@ -813,21 +815,65 @@ function localEventToGoogleBody(event: {
   return body;
 }
 
+async function restoreMertRecurringGoogleInstance(userId: string, calendarId: string, googleEvent: GoogleCalendarEvent) {
+  if (isReadOnlyGoogleCalendarId(calendarId) || !googleEvent.recurringEventId) return false;
+  const parent = await prisma.event.findFirst({
+    where: { userId, googleCalendarId: calendarId, googleEventId: googleEvent.recurringEventId },
+    include: { childEvents: true },
+  });
+  if (!parent?.googleManagedByMert) return false;
+  if (!parent.allDay && !parent.timeZone) return true;
+  const originalStart = googleDateToDate(googleEvent.originalStartTime);
+  if (!originalStart) return true;
+  const identity = findRecurringInstanceIdentity(parent, originalStart, parent.timeZone ?? "UTC");
+  if (!identity) return true;
+  const override = parent.childEvents.find((child) =>
+    child.instanceId === identity.instanceId || child.instanceId === identity.legacyInstanceId
+  );
+  const resourcePath = `/calendars/primary/events/${encodeURIComponent(googleEvent.id)}`;
+  if (override?.deleted) {
+    if (googleEvent.status !== "cancelled") await googleCalendarFetch(userId, resourcePath, { method: "DELETE" });
+    return true;
+  }
+  const event = override ?? {
+    ...parent,
+    startTime: identity.startTime,
+    endTime: new Date(identity.startTime.getTime() + parent.endTime.getTime() - parent.startTime.getTime()),
+  };
+  if (googleEvent.status !== "cancelled" &&
+      googleDateToDate(googleEvent.start)?.getTime() === event.startTime.getTime() &&
+      googleDateToDate(googleEvent.end)?.getTime() === event.endTime.getTime() &&
+      googleEvent.summary === event.title &&
+      cleanGoogleDescription(googleEvent.description, event.link) === event.description) return true;
+
+  await googleCalendarFetch(userId, resourcePath, {
+    method: "PATCH",
+    body: JSON.stringify(localEventToGoogleBody({ ...event, parentEventId: parent.id, recurrenceRule: null })),
+  });
+  return true;
+}
+
 async function deleteMappedGoogleEvent(
   userId: string,
   calendarId: string,
   googleEvent: GoogleCalendarEvent
 ) {
+  if (await restoreMertRecurringGoogleInstance(userId, calendarId, googleEvent)) return false;
   const existing = await prisma.event.findFirst({
     where: {
       userId,
       googleCalendarId: calendarId,
       googleEventId: googleEvent.id,
     },
-    select: { id: true, parentEventId: true },
   });
 
   if (existing) {
+    if (!isReadOnlyGoogleCalendarId(calendarId) &&
+        (existing.googleManagedByMert || googleEvent.extendedProperties?.private?.mertEventId === existing.id)) {
+      if (existing.recurrenceRule && !existing.allDay && !existing.timeZone) return false;
+      await pushLocalEventToGoogle(userId, existing.id);
+      return false;
+    }
     if (!existing.parentEventId) {
       await prisma.event.deleteMany({ where: { parentEventId: existing.id } });
     }
@@ -890,6 +936,7 @@ async function upsertGoogleEvent(
   googleEvent: GoogleCalendarEvent,
   defaultColor?: string | null
 ) {
+  if (await restoreMertRecurringGoogleInstance(userId, calendarId, googleEvent)) return false;
   const startTime = googleDateToDate(googleEvent.start);
   const endTime = googleDateToDate(googleEvent.end);
   if (!startTime || !endTime) return false;
@@ -917,6 +964,27 @@ async function upsertGoogleEvent(
     ? await prisma.event.findFirst({ where: { id: linkedLocalId, userId } })
     : null;
 
+  const mertManagedEvent = existingByGoogleId?.googleManagedByMert
+    ? existingByGoogleId
+    : !googleEvent.recurringEventId ? linkedLocalEvent : null;
+  if (!isReadOnlyGoogleCalendarId(calendarId) && mertManagedEvent) {
+    // Google is a published copy; importing its schedule would undo local fixes.
+    // A legacy UTC zone cannot identify the user's intended zone; manual sync supplies it.
+    if (mertManagedEvent.recurrenceRule && !mertManagedEvent.allDay && !mertManagedEvent.timeZone) {
+      await prisma.event.update({ where: { id: mertManagedEvent.id }, data: { googleManagedByMert: true } });
+      return false;
+    }
+    if (googleEvent.etag && mertManagedEvent.googleEtag === googleEvent.etag) {
+      await prisma.event.update({
+        where: { id: mertManagedEvent.id },
+        data: { googleManagedByMert: true },
+      });
+    } else {
+      await pushLocalEventToGoogle(userId, mertManagedEvent.id);
+    }
+    return false;
+  }
+
   const parent = googleEvent.recurringEventId
     ? await prisma.event.findFirst({
         where: {
@@ -942,6 +1010,7 @@ async function upsertGoogleEvent(
     link,
     startTime,
     endTime,
+    timeZone: googleEvent.start?.timeZone ?? null,
     allDay: isGoogleAllDay(googleEvent),
     ...(parent ? { recurrenceRule: null, recurrenceEndDate: null } : recurrenceFromGoogle(googleEvent)),
     deleted: false,
@@ -1060,7 +1129,7 @@ async function syncGoogleCalendarEvents(
 
 export async function syncGoogleCalendarForUser(
   userId: string,
-  options: { force?: boolean } = {}
+  options: { force?: boolean; full?: boolean } = {}
 ) {
   const cooldownKey = `google-calendar-sync:${userId}`;
   if (!options.force && readInMemoryCache<boolean>(cooldownKey)) {
@@ -1095,7 +1164,7 @@ export async function syncGoogleCalendarForUser(
   const primary = await syncGoogleCalendarEvents(
     userId,
     GOOGLE_PRIMARY_CALENDAR_ID,
-    user.googleCalendarSyncToken
+    options.full ? null : user.googleCalendarSyncToken
   );
   let changed = primary.changed;
 
@@ -1141,6 +1210,36 @@ export async function syncGoogleCalendarForUser(
   return { changed, skipped: false };
 }
 
+export async function repairMertEventsInGoogle(userId: string, timeZone: string) {
+  const events = await prisma.event.findMany({
+    where: {
+      userId, deleted: false, parentEventId: null,
+      googleCalendarId: GOOGLE_PRIMARY_CALENDAR_ID,
+      googleEventId: { not: null },
+    },
+  });
+  let repairedCount = 0;
+  // Read each remote marker before publishing so Google-origin events remain imports.
+  for (const event of events) {
+    let managedByMert = event.googleManagedByMert;
+    if (!managedByMert) {
+      try {
+        const remote = await googleCalendarFetch<GoogleCalendarEvent>(
+          userId,
+          `/calendars/primary/events/${encodeURIComponent(event.googleEventId!)}`
+        );
+        managedByMert = remote.extendedProperties?.private?.mertEventId === event.id;
+      } catch (error) {
+        if (error instanceof GoogleCalendarSyncError && (error.status === 404 || error.status === 410)) continue;
+        throw error;
+      }
+    }
+    if (!managedByMert) continue;
+    if (await pushLocalEventToGoogle(userId, event.id, { timeZone })) repairedCount += 1;
+  }
+  return { repairedCount };
+}
+
 export async function pushLocalEventToGoogle(
   userId: string,
   eventId: string,
@@ -1155,17 +1254,20 @@ export async function pushLocalEventToGoogle(
   if (!event || (event.parentEventId && !event.googleEventId)) return null;
   if (isReadOnlyGoogleCalendarId(event.googleCalendarId)) return null;
 
-  let timeZone = typeof options.timeZone === "string" ? normalizeTimeZone(options.timeZone) : undefined;
+  let timeZone = event.timeZone ?? (typeof options.timeZone === "string" ? normalizeTimeZone(options.timeZone) : undefined);
   if (event.recurrenceRule && !timeZone && event.googleEventId) {
     try {
       const existingGoogleEvent = await googleCalendarFetch<GoogleCalendarEvent>(
         userId,
         `/calendars/${encodeURIComponent(GOOGLE_PRIMARY_CALENDAR_ID)}/events/${encodeURIComponent(event.googleEventId)}`
       );
-      timeZone = existingGoogleEvent.start?.timeZone;
+      timeZone = existingGoogleEvent.extendedProperties?.private?.mertTimeZone ?? existingGoogleEvent.start?.timeZone;
     } catch (error) {
-      if (!(error instanceof GoogleCalendarSyncError && error.status === 404)) throw error;
+      if (!(error instanceof GoogleCalendarSyncError && (error.status === 404 || error.status === 410))) throw error;
     }
+  }
+  if (event.recurrenceRule && !event.allDay && !timeZone) {
+    throw new GoogleCalendarSyncError("Open Settings and sync Google Calendar to set this event's time zone.", 409);
   }
   const body = localEventToGoogleBody(event, timeZone);
   const params = new URLSearchParams({ conferenceDataVersion: "1" });
@@ -1184,7 +1286,7 @@ export async function pushLocalEventToGoogle(
     if (
       event.googleEventId &&
       error instanceof GoogleCalendarSyncError &&
-      error.status === 404
+      (error.status === 404 || error.status === 410)
     ) {
       googleEvent = await googleCalendarFetch<GoogleCalendarEvent>(
         userId,
@@ -1204,6 +1306,8 @@ export async function pushLocalEventToGoogle(
       googleEtag: googleEvent.etag ?? null,
       googleUpdatedAt: googleEventUpdateDate(googleEvent),
       googleSyncedAt: new Date(),
+      googleManagedByMert: true,
+      ...(timeZone && { timeZone }),
     },
   });
 

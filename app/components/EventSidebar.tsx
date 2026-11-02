@@ -124,6 +124,7 @@ export function EventSidebar({
         endTime: new Date(endTime).toISOString(),
         color,
         allDay: false,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         recurrenceRule: recurrenceRule || null,
         recurrenceEndDate: recurrenceEndDate
           ? new Date(recurrenceEndDate).toISOString()

@@ -172,3 +172,21 @@ occurrence identity, preserving moved-out occurrences and cancellations.
 
 `npm test` includes an isolated PGlite PostgreSQL test of the migration, including
 bulk writes and rollback. It does not connect to the configured production database.
+
+### Repairing Google Calendar times after daylight saving changes
+
+Apply `npx prisma migrate deploy` and run `npx prisma generate` before deploying
+this update. The `20261102000000_event_sync_authority` migration adds an event's
+named time zone and records whether Mert manages its Google copy.
+
+After deployment, open Settings → Google Calendar sync → Sync now in your usual
+time zone. This republishes existing Mert-managed events before importing Google
+changes, repairing legacy UTC recurrences in place. It uses the times currently
+saved in Mert; it cannot recover an intended time that has already been changed
+in Mert. Older mappings are checked against Google's private `mertEventId` marker
+before repair, so Google-origin events are not claimed merely because they have
+been imported. Events on other Google calendars continue to follow their owners.
+
+For Mert-managed events, edit the schedule in Mert. Google changes and cancellations
+are restored from Mert, while guest lists and RSVP data remain in Google. Saved
+event time zones take priority over the browser's current zone on later syncs.

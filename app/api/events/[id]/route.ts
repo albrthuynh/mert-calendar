@@ -251,7 +251,7 @@ export async function PUT(
     );
   }
 
-  const scheduleTimeZone = normalizeTimeZone(typeof timeZone === "string" ? timeZone : null);
+  const scheduleTimeZone = existing.timeZone ?? normalizeTimeZone(typeof timeZone === "string" ? timeZone : null);
   let scheduleTimes = {
     startTime: startTime === undefined ? existing.startTime : new Date(startTime),
     endTime: endTime === undefined ? existing.endTime : new Date(endTime),
@@ -278,6 +278,7 @@ export async function PUT(
         description: description?.trim() || null,
       }),
       ...(cleanLink !== undefined && { link: cleanLink }),
+      timeZone: scheduleTimeZone,
       ...((startTime !== undefined || endTime !== undefined) && scheduleTimes),
       ...(color !== undefined && { color }),
       ...(allDay !== undefined && { allDay }),
@@ -343,7 +344,7 @@ export async function DELETE(
 
   if (editScope === "following") {
     let truncatedSeries;
-    const timeZone = normalizeTimeZone(typeof body.timeZone === "string" ? body.timeZone : null);
+    const timeZone = existing.timeZone ?? normalizeTimeZone(typeof body.timeZone === "string" ? body.timeZone : null);
     try {
       truncatedSeries = truncateSeriesBeforeInstance(existing, new Date(instanceStartTime ?? ""), timeZone);
     } catch (error) {
