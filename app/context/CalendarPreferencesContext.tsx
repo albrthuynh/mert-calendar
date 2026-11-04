@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type CalendarPreferences = {
+  calendarColor: string | null;
   backgroundUrl: string | null;
   topLeftUrl: string | null;
 };
@@ -19,6 +20,7 @@ const CalendarPreferencesContext = createContext<
 
 export function CalendarPreferencesProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<CalendarPreferences>({
+    calendarColor: null,
     backgroundUrl: null,
     topLeftUrl: null,
   });
@@ -30,6 +32,7 @@ export function CalendarPreferencesProvider({ children }: { children: ReactNode 
       if (!res.ok) return;
       const data = (await res.json()) as CalendarPreferences;
       setPrefs({
+        calendarColor: data.calendarColor ?? null,
         backgroundUrl: data.backgroundUrl ?? null,
         topLeftUrl: data.topLeftUrl ?? null,
       });
@@ -47,6 +50,7 @@ export function CalendarPreferencesProvider({ children }: { children: ReactNode 
         const data = (await res.json()) as CalendarPreferences;
         if (cancelled) return;
         setPrefs({
+          calendarColor: data.calendarColor ?? null,
           backgroundUrl: data.backgroundUrl ?? null,
           topLeftUrl: data.topLeftUrl ?? null,
         });
@@ -66,6 +70,7 @@ export function CalendarPreferencesProvider({ children }: { children: ReactNode 
   return (
     <CalendarPreferencesContext.Provider
       value={{
+        calendarColor: prefs.calendarColor,
         backgroundUrl: prefs.backgroundUrl,
         topLeftUrl: prefs.topLeftUrl,
         setPreferences: setPrefs,

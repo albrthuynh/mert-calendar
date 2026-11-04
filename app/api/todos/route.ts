@@ -1,3 +1,5 @@
+import { CalendarResponseBudget, CalendarWorkloadError } from "@/lib/security/workload";
+import { invalidRange } from "@/lib/security/requestValidation";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -29,9 +31,9 @@ export async function GET(req: NextRequest) {
 
   const rangeStart = new Date(start);
   const rangeEnd = new Date(end);
-  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+  if (invalidRange(rangeStart, rangeEnd)) {
     return NextResponse.json(
-      { error: "start and end must be valid ISO timestamps" },
+      { error: "start and end must be valid, ordered dates no more than 400 days apart" },
       { status: 400 }
     );
   }
@@ -47,6 +49,7 @@ export async function GET(req: NextRequest) {
 
   const todos = await getOrSetInMemoryCache(cacheKey, TODOS_CACHE_TTL_MS, () =>
     prisma.todo.findMany({
+      take: 2001,
       where: {
         userId: session.user.id,
         taskDate: {
@@ -58,6 +61,13 @@ export async function GET(req: NextRequest) {
     })
   );
 
+  try {
+    if (todos.length > 2000) throw new CalendarWorkloadError();
+    new CalendarResponseBudget().consume(todos);
+  } catch (error) {
+    if (error instanceof CalendarWorkloadError) return NextResponse.json({ error: error.message }, { status: 422 });
+    throw error;
+  }
   return NextResponse.json(todos);
 }
 

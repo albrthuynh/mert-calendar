@@ -1,3 +1,4 @@
+jest.mock("@/lib/security/rateLimit", () => ({ withSecurityLease: jest.fn(async (_key, operation) => operation()) }));
 import { syncGoogleCalendarForUser } from "@/lib/googleCalendar";
 import { prisma } from "@/lib/prisma";
 

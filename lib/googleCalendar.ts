@@ -1,3 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { logSecurityError } from "@/lib/security/logging";
+import { decryptToken, encryptToken } from "@/lib/security/tokenEncryption";
+import { withSecurityLease } from "@/lib/security/rateLimit";
 import { prisma } from "@/lib/prisma";
 import { bumpUserDataVersion, readInMemoryCache, writeInMemoryCache } from "@/lib/inMemoryCache";
 import { normalizeEventLink } from "@/lib/eventLink";
@@ -10,6 +14,26 @@ import {
   isReadOnlyGoogleCalendarId,
 } from "@/lib/googleCalendarReadOnly";
 
+const googleOperationBudget = new AsyncLocalStorage<{ deadline: number; signal: AbortSignal }>();
+
+function assertGoogleOperationBudget() {
+  const budget = googleOperationBudget.getStore();
+  if (budget && Date.now() >= budget.deadline) {
+    throw new GoogleCalendarSyncError("Calendar sync took too long. Try again shortly.", 503);
+  }
+}
+
+function withGoogleOperationBudget<T>(operation: () => Promise<T>) {
+  if (googleOperationBudget.getStore()) return operation();
+  return googleOperationBudget.run({ deadline: Date.now() + 240000, signal: AbortSignal.timeout(240000) }, operation);
+}
+
+function googleRequestSignal() {
+  assertGoogleOperationBudget();
+  const budget = googleOperationBudget.getStore();
+  return budget ? AbortSignal.any([budget.signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
+}
+
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_LIST_SCOPE =
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
@@ -19,9 +43,12 @@ export { GOOGLE_PRIMARY_CALENDAR_ID, isReadOnlyGoogleCalendarId };
 const GOOGLE_API_BASE = "https://www.googleapis.com/calendar/v3";
 const AUTO_SYNC_COOLDOWN_MS = 60 * 1000;
 const WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_GOOGLE_PAGES = 20;
 const WATCH_DURATION_MS = 6 * 24 * 60 * 60 * 1000;
 
 type GoogleAccount = {
+  userId: string;
+  storedRefreshToken: string | null;
   id: string;
   access_token: string | null;
   refresh_token: string | null;
@@ -182,8 +209,8 @@ function hasCalendarListScope(scope: string | null | undefined) {
 }
 
 async function getGoogleAccount(userId: string): Promise<GoogleAccount | null> {
-  return prisma.account.findFirst({
-    where: { userId, provider: "google" },
+  const account = await prisma.account.findFirst({
+    where: { userId, provider: "google", user: { disabledAt: null } },
     select: {
       id: true,
       access_token: true,
@@ -192,6 +219,14 @@ async function getGoogleAccount(userId: string): Promise<GoogleAccount | null> {
       scope: true,
     },
   });
+  if (!account) return null;
+  return {
+    ...account,
+    storedRefreshToken: account.refresh_token,
+    access_token: account.access_token ? decryptToken(account.access_token, `${userId}:access_token`) : null,
+    refresh_token: account.refresh_token ? decryptToken(account.refresh_token, `${userId}:refresh_token`) : null,
+    userId,
+  };
 }
 
 export async function getGoogleCalendarStatus(
@@ -259,7 +294,7 @@ export async function checkGoogleCalendarConnection(
   }
 }
 
-async function refreshGoogleAccessToken(account: GoogleAccount) {
+async function refreshGoogleAccessToken(account: GoogleAccount): Promise<string> {
   if (!account.refresh_token) {
     throw new GoogleCalendarSyncError(
       "Google Calendar access has expired. Reconnect Google Calendar to continue syncing.",
@@ -275,6 +310,7 @@ async function refreshGoogleAccessToken(account: GoogleAccount) {
   }
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
+    signal: googleRequestSignal(),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -290,7 +326,7 @@ async function refreshGoogleAccessToken(account: GoogleAccount) {
     // Keep the linked account for sign-in, but stop retrying a revoked refresh token.
     // Matching the old token avoids clearing a concurrent reconnect's new credentials.
     await prisma.account.updateMany({
-      where: { id: account.id, refresh_token: account.refresh_token },
+      where: { id: account.id, refresh_token: account.storedRefreshToken },
       data: { access_token: null, refresh_token: null, expires_at: null },
     });
     throw new GoogleCalendarSyncError(
@@ -301,7 +337,7 @@ async function refreshGoogleAccessToken(account: GoogleAccount) {
   }
   if (!res.ok || !payload.access_token) {
     throw new GoogleCalendarSyncError(
-      payload.error_description || payload.error || "Failed to refresh Google access token.",
+      "Failed to refresh Google access token. Try again shortly.",
       res.ok ? 502 : res.status
     );
   }
@@ -310,21 +346,22 @@ async function refreshGoogleAccessToken(account: GoogleAccount) {
     ? Math.floor(Date.now() / 1000) + payload.expires_in
     : null;
 
-  await prisma.account.update({
-    where: { id: account.id },
+  const saved = await prisma.account.updateMany({
+    where: { id: account.id, refresh_token: account.storedRefreshToken },
     data: {
-      access_token: payload.access_token,
+      access_token: encryptToken(payload.access_token, `${account.userId}:access_token`),
       expires_at: expiresAt,
-      refresh_token: payload.refresh_token ?? account.refresh_token,
+      refresh_token: encryptToken(payload.refresh_token ?? account.refresh_token, `${account.userId}:refresh_token`),
       scope: payload.scope ?? account.scope,
       token_type: payload.token_type ?? undefined,
     },
   });
 
+  if (!saved.count) throw new GoogleCalendarSyncError("Google credentials changed while refreshing. Try again shortly.", 409);
   return payload.access_token;
 }
 
-async function getGoogleAccessToken(userId: string, forceRefresh = false) {
+async function getGoogleAccessToken(userId: string, forceRefresh = false): Promise<string> {
   const account = await getGoogleAccount(userId);
   if (!account) {
     throw new GoogleCalendarSyncError("Google account is not connected.", 409, true);
@@ -352,6 +389,7 @@ async function googleCalendarFetch<T>(
   const accessToken = await getGoogleAccessToken(userId, !retry);
   const res = await fetch(`${GOOGLE_API_BASE}${path}`, {
     ...init,
+    signal: googleRequestSignal(),
     headers: {
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
@@ -478,7 +516,7 @@ export async function ensureGoogleCalendarWatch(
 
   if (existing) {
     await stopGoogleCalendarChannel(userId, existing).catch((error) => {
-      console.error("Google Calendar channel stop failed", error);
+      logSecurityError("Google Calendar channel stop failed", error);
     });
   }
 
@@ -539,9 +577,10 @@ export async function ensureGoogleCalendarWatches(userId: string) {
     select: { calendarId: true },
   });
   for (const source of sources) {
+    assertGoogleOperationBudget();
     await ensureGoogleCalendarWatch(userId, source.calendarId).catch((error) => {
-      console.error(
-        `Google Calendar watch setup failed for ${source.calendarId}`,
+      logSecurityError(
+        "Google Calendar watch setup failed for a source calendar",
         error
       );
     });
@@ -593,7 +632,7 @@ export async function handleGoogleCalendarWebhook(headers: Headers) {
   await syncGoogleCalendarForUser(channel.userId);
   await ensureGoogleCalendarWatch(channel.userId, channel.calendarId).catch(
     (error) => {
-      console.error("Google Calendar watch renewal failed", error);
+      logSecurityError("Google Calendar watch renewal failed", error);
     }
   );
 
@@ -626,7 +665,7 @@ export async function renewGoogleCalendarWatches() {
       result.ensured += 1;
     } catch (error) {
       result.failed += 1;
-      console.error("Google Calendar watch renewal failed", error);
+      logSecurityError("Google Calendar watch renewal failed", error);
     }
   }
 
@@ -1074,9 +1113,12 @@ async function listGoogleCalendarChanges(
 ) {
   const items: GoogleCalendarEvent[] = [];
   let nextPageToken: string | undefined;
+  let pageCount = 0;
   let nextSyncToken: string | undefined;
+  let responseBytes = 0;
 
   do {
+    if (++pageCount > MAX_GOOGLE_PAGES) throw new GoogleCalendarSyncError("Too many Google Calendar results. Try selecting fewer calendars.", 422);
     const params = new URLSearchParams({
       maxResults: "2500",
       showDeleted: "true",
@@ -1100,7 +1142,12 @@ async function listGoogleCalendarChanges(
       userId,
       `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`
     );
-    items.push(...(page.items ?? []));
+    const pageItems = page.items ?? [];
+    for (const item of pageItems) responseBytes += Buffer.byteLength(JSON.stringify(item), "utf8");
+    if (items.length + pageItems.length > 10000 || responseBytes > 8 * 1024 * 1024) {
+      throw new GoogleCalendarSyncError("Google Calendar returned too much data to sync at once.", 422);
+    }
+    items.push(...pageItems);
     nextPageToken = page.nextPageToken;
     nextSyncToken = page.nextSyncToken ?? nextSyncToken;
   } while (nextPageToken);
@@ -1130,6 +1177,7 @@ async function syncGoogleCalendarEvents(
   let changed = false;
 
   for (const item of [...masters, ...instances]) {
+    assertGoogleOperationBudget();
     const itemChanged =
       item.status === "cancelled"
         ? await deleteMappedGoogleEvent(userId, calendarId, item)
@@ -1140,7 +1188,7 @@ async function syncGoogleCalendarEvents(
   return { changed, nextSyncToken: response.nextSyncToken };
 }
 
-export async function syncGoogleCalendarForUser(
+async function syncGoogleCalendarForUserUnlocked(
   userId: string,
   options: { force?: boolean; full?: boolean } = {}
 ) {
@@ -1187,6 +1235,7 @@ export async function syncGoogleCalendarForUser(
     where: { userId },
   });
   for (const source of sources) {
+    assertGoogleOperationBudget();
     try {
       const result = await syncGoogleCalendarEvents(
         userId,
@@ -1203,8 +1252,8 @@ export async function syncGoogleCalendarForUser(
         },
       });
     } catch (error) {
-      console.error(
-        `Google Calendar sync failed for calendar ${source.calendarId}`,
+      logSecurityError(
+        "Google Calendar sync failed for a source calendar",
         error
       );
     }
@@ -1223,17 +1272,31 @@ export async function syncGoogleCalendarForUser(
   return { changed, skipped: false };
 }
 
-export async function repairMertEventsInGoogle(userId: string, timeZone: string) {
+export async function syncGoogleCalendarForUser(
+  userId: string,
+  options: { force?: boolean; full?: boolean } = {}
+) {
+  if (!options.force && readInMemoryCache<boolean>(`google-calendar-sync:${userId}`)) {
+    return { changed: false, skipped: true };
+  }
+  return await withSecurityLease(`google-sync:${userId}`, () => withGoogleOperationBudget(() => syncGoogleCalendarForUserUnlocked(userId, options)), 900)
+    ?? { changed: false, skipped: true };
+}
+
+async function repairMertEventsInGoogleUnlocked(userId: string, timeZone: string) {
   const events = await prisma.event.findMany({
+    take: 2001,
     where: {
       userId, deleted: false, parentEventId: null,
       OR: [{ googleCalendarId: null }, { googleCalendarId: GOOGLE_PRIMARY_CALENDAR_ID }],
     },
   });
+  if (events.length > 2000) throw new GoogleCalendarSyncError("Too many events to repair at once.", 422);
   let repairedCount = 0;
   events.sort((first, second) => Number(Boolean(first.googleEventId)) - Number(Boolean(second.googleEventId)));
   // Existing Google-origin events remain imports; missing writable events need a copy.
   for (const event of events) {
+    assertGoogleOperationBudget();
     let managedByMert = event.googleManagedByMert || !event.googleEventId;
     if (event.googleEventId) {
       try {
@@ -1536,8 +1599,10 @@ export async function deleteLocalEventFromGoogle(
 async function fetchGoogleCalendarList(userId: string) {
   const entries: GoogleCalendarListEntry[] = [];
   let nextPageToken: string | undefined;
+  let pageCount = 0;
 
   do {
+    if (++pageCount > MAX_GOOGLE_PAGES) throw new GoogleCalendarSyncError("Too many Google Calendar results. Try selecting fewer calendars.", 422);
     const params = new URLSearchParams({
       maxResults: "250",
       minAccessRole: "reader",
@@ -1600,7 +1665,7 @@ async function removeGoogleCalendarSource(userId: string, calendarId: string) {
   });
   for (const channel of channels) {
     await stopGoogleCalendarChannel(userId, channel).catch((error) => {
-      console.error("Google Calendar channel stop failed", error);
+      logSecurityError("Google Calendar channel stop failed", error);
     });
   }
   await prisma.googleCalendarChannel.updateMany({
@@ -1695,4 +1760,10 @@ export async function setGoogleCalendarSources(
 
 export function isGoogleCalendarSyncError(error: unknown): error is GoogleCalendarSyncError {
   return error instanceof GoogleCalendarSyncError;
+}
+
+export async function repairMertEventsInGoogle(userId: string, timeZone: string) {
+  const result = await withSecurityLease(`google-sync:${userId}`, () => withGoogleOperationBudget(() => repairMertEventsInGoogleUnlocked(userId, timeZone)), 900);
+  if (!result) throw new GoogleCalendarSyncError("A calendar sync is already running. Try again shortly.", 429);
+  return result;
 }

@@ -1,3 +1,4 @@
+import { decryptToken, encryptToken } from "@/lib/security/tokenEncryption";
 import { checkGoogleCalendarConnection } from "@/lib/googleCalendar";
 import { prisma } from "@/lib/prisma";
 
@@ -25,6 +26,8 @@ describe("Google Calendar connection checks", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.TOKEN_ENCRYPTION_KEY = "ab".repeat(32);
+    process.env.TOKEN_ENCRYPTION_MODE = "enabled";
     process.env.AUTH_GOOGLE_ID = "test-client";
     process.env.AUTH_GOOGLE_SECRET = "test-secret";
     account = {
@@ -71,8 +74,9 @@ describe("Google Calendar connection checks", () => {
     });
     expect(fetchMock.mock.calls[0][0]).toBe("https://oauth2.googleapis.com/token");
     expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe("Bearer new-access-token");
-    expect(account.access_token).toBe("new-access-token");
-    expect(account.refresh_token).toBe("refresh-token");
+    expect(account.access_token).not.toBe("new-access-token");
+    expect(decryptToken(account.access_token!, "user-1:access_token")).toBe("new-access-token");
+    expect(decryptToken(account.refresh_token!, "user-1:refresh_token")).toBe("refresh-token");
     expect(account.expires_at).toBeGreaterThan(Date.now() / 1000);
   });
 
@@ -94,6 +98,25 @@ describe("Google Calendar connection checks", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("compares the stored ciphertext when clearing revoked credentials", async () => {
+    const ciphertext = encryptToken("refresh-token", "user-1:refresh_token");
+    account.refresh_token = ciphertext;
+    fetchMock.mockResolvedValueOnce(Response.json({ error: "invalid_grant" }, { status: 400 }));
+    expect(await checkGoogleCalendarConnection("user-1")).toMatchObject({ requiresReconnect: true });
+    expect(prisma.account.updateMany).toHaveBeenCalledWith({
+      where: { id: "account-1", refresh_token: ciphertext },
+      data: { access_token: null, refresh_token: null, expires_at: null },
+    });
+  });
+
+  it("does not overwrite a concurrent reconnection after refreshing", async () => {
+    (prisma.account.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 });
+    fetchMock.mockResolvedValueOnce(Response.json({ access_token: "stale-refresh-result", expires_in: 3600 }));
+    await expect(checkGoogleCalendarConnection("user-1")).rejects.toMatchObject({ status: 409 });
+    expect(account.access_token).toBe("old-access-token");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("requests reconnection when expired credentials have no refresh token", async () => {
     account.refresh_token = null;
     expect(await checkGoogleCalendarConnection("user-1")).toMatchObject({ requiresReconnect: true });
@@ -107,7 +130,7 @@ describe("Google Calendar connection checks", () => {
       requiresReconnect: false,
     });
     expect(prisma.account.updateMany).not.toHaveBeenCalled();
-    expect(account.refresh_token).toBe("refresh-token");
+    expect(decryptToken(account.refresh_token!, "user-1:refresh_token")).toBe("refresh-token");
   });
 
   it("retries a rejected access token once with a fresh token", async () => {

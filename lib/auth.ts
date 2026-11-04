@@ -1,12 +1,15 @@
+import { logSecurityError } from "@/lib/security/logging";
+import { randomBytes } from "node:crypto";
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { encryptedPrismaAdapter } from "@/lib/security/authAdapter";
+import { encryptAccountTokens } from "@/lib/security/tokenEncryption";
 import { prisma } from "./prisma";
 import { authConfig } from "@/auth.config";
 import type { Account, User } from "next-auth";
 import { ensureGoogleCalendarWatches } from "@/lib/googleCalendar";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-const SESSION_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
+const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 function hasGoogleCalendarScope(scope: string | null | undefined) {
   return !!scope?.split(/\s+/).includes(GOOGLE_CALENDAR_SCOPE);
@@ -25,7 +28,8 @@ async function persistGoogleCalendarConsent(
       provider: "google",
       providerAccountId: account.providerAccountId,
     },
-    data: {
+    data: encryptAccountTokens({
+      userId: user.id,
       access_token: account.access_token ?? undefined,
       refresh_token: account.refresh_token ?? undefined,
       expires_at: account.expires_at ?? undefined,
@@ -36,7 +40,7 @@ async function persistGoogleCalendarConsent(
         typeof account.session_state === "string"
           ? account.session_state
           : undefined,
-    },
+    }),
   });
 
   if (hasCalendarScope) {
@@ -45,32 +49,35 @@ async function persistGoogleCalendarConsent(
       data: { googleCalendarSyncEnabled: true },
     });
     await ensureGoogleCalendarWatches(user.id).catch((error) => {
-      console.error("Google Calendar watch setup failed", error);
+      logSecurityError("Google Calendar watch setup failed", error);
     });
   }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
+  adapter: encryptedPrismaAdapter(),
+  logger: {
+    error(error) { logSecurityError("Authentication failed", error); },
+  },
   session: {
-    strategy: "jwt",
+    strategy: "database",
+    generateSessionToken: () => randomBytes(32).toString("hex"),
     maxAge: SESSION_MAX_AGE_SECONDS,
     updateAge: 24 * 60 * 60,
   },
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, account }) {
+      if (user.id) {
+        const existingUser = await prisma.user.findUnique({ where: { id: user.id }, select: { disabledAt: true } });
+        if (existingUser?.disabledAt) return false;
+      }
       await persistGoogleCalendarConsent(user, account);
       return true;
     },
-    jwt({ token, user }) {
-      // Persist the user's DB id into the JWT on first sign-in
-      if (user?.id) token.sub = user.id;
-      return token;
-    },
-    session({ session, token }) {
-      if (token.sub) session.user.id = token.sub;
+    session({ session, user }) {
+      session.user.id = user.id;
       return session;
     },
   },

@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/security/logging";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { checkGoogleCalendarConnection, isGoogleCalendarSyncError } from "@/lib/googleCalendar";
@@ -13,7 +14,7 @@ export async function GET() {
     return NextResponse.json(status, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to check Google Calendar connection." },
+      { error: publicErrorMessage(error, "Failed to check Google Calendar connection.") },
       { status: isGoogleCalendarSyncError(error) ? error.status : 500 }
     );
   }

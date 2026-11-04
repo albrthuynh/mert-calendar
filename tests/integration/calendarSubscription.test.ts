@@ -19,13 +19,15 @@ async function subscriptionContent(timeZone = "America/Chicago") {
     { params: Promise.resolve({ token: "token" }) }
   );
   expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
   return response.text();
 }
 
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date("2026-10-28T12:00:00Z"));
   (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: "user", name: "Albert", defaultReminderMinutes: 10 });
-  (prisma.event.findMany as jest.Mock).mockReset();
+  (prisma.event.findMany as jest.Mock).mockReset().mockResolvedValue([]);
 });
 afterEach(() => jest.useRealTimers());
 
@@ -51,10 +53,10 @@ it("keeps 12:30 through spring forward", async () => {
 
 it("preserves cancellations stored under the old fixed UTC occurrence key", async () => {
   const cancelled = {
-    ...series, id: "cancelled", instanceId: "series__2026-11-01T17:30:00.000Z",
+    ...series, id: "cancelled", parentEventId: "series", instanceId: "series__2026-11-01T17:30:00.000Z",
     startTime: new Date("2026-11-01T17:30:00Z"), endTime: new Date("2026-11-01T18:30:00Z"), deleted: true,
   };
-  (prisma.event.findMany as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...series, childEvents: [cancelled] }]);
+  (prisma.event.findMany as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...series, childEvents: [cancelled] }]).mockResolvedValueOnce([cancelled]);
   const content = await subscriptionContent();
   expect(content).not.toContain("DTSTART:20261101");
   expect(content).toContain("DTSTART:20261108T183000Z");
@@ -62,10 +64,10 @@ it("preserves cancellations stored under the old fixed UTC occurrence key", asyn
 
 it("exports edited occurrences at their explicitly chosen time", async () => {
   const edited = {
-    ...series, id: "edited", instanceId: "series__2026-11-01T17:30:00.000Z", title: "Later lunch",
+    ...series, id: "edited", parentEventId: "series", instanceId: "series__2026-11-01T17:30:00.000Z", title: "Later lunch",
     startTime: new Date("2026-11-01T20:30:00Z"), endTime: new Date("2026-11-01T21:30:00Z"), deleted: false,
   };
-  (prisma.event.findMany as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...series, childEvents: [edited] }]);
+  (prisma.event.findMany as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([{ ...series, childEvents: [edited] }]).mockResolvedValueOnce([edited]);
   const content = await subscriptionContent();
   expect(content).toContain("DTSTART:20261101T203000Z");
   expect(content).not.toContain("DTSTART:20261101T183000Z");

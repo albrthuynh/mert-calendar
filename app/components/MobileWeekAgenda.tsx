@@ -193,7 +193,7 @@ export function MobileWeekAgenda({
             return (
               <section
                 key={day.toISOString()}
-                className={`overflow-hidden rounded-xl border bg-white/90 dark:bg-gray-900/90 ${
+                className={`overflow-hidden rounded-xl border calendar-agenda-surface bg-white/90 dark:bg-gray-900/90 ${
                   dayIsSelected
                     ? "border-blue-300 shadow-sm dark:border-blue-800"
                     : "border-gray-200 dark:border-gray-800"
@@ -265,16 +265,16 @@ export function MobileWeekAgenda({
       ref={weekGridScrollRef}
       className={`h-full overflow-auto overscroll-contain ${
         hasBackground
-          ? "bg-white/75 dark:bg-gray-900/75"
-          : "bg-white/90 dark:bg-gray-900/90"
+          ? "calendar-agenda-surface bg-white/75 dark:bg-gray-900/75"
+          : "calendar-agenda-surface bg-white/90 dark:bg-gray-900/90"
       }`}
       style={{ paddingBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
     >
       <div style={{ width: weekGridWidth }}>
-        <div className="sticky top-0 z-40 bg-white/95 shadow-[0_1px_0_rgba(148,163,184,0.25)] backdrop-blur-md dark:bg-gray-900/95">
+        <div className="sticky top-0 z-40 calendar-agenda-surface bg-white/95 shadow-[0_1px_0_rgba(148,163,184,0.25)] backdrop-blur-md dark:bg-gray-900/95">
           <div className="flex h-[58px]">
             <div
-              className={`sticky left-0 z-50 flex shrink-0 items-end justify-center bg-white/95 pb-2 text-[10px] font-medium uppercase tracking-wide backdrop-blur-md dark:bg-gray-900/95 ${
+              className={`sticky left-0 z-50 flex shrink-0 items-end justify-center calendar-agenda-surface bg-white/95 pb-2 text-[10px] font-medium uppercase tracking-wide backdrop-blur-md dark:bg-gray-900/95 ${
                 hasBackground
                   ? "text-gray-700 dark:text-gray-200"
                   : "text-gray-400 dark:text-gray-500"
@@ -326,7 +326,7 @@ export function MobileWeekAgenda({
 
           <div className="flex min-h-[46px] border-t border-gray-100 dark:border-gray-800">
             <div
-              className={`sticky left-0 z-50 flex shrink-0 items-center justify-center bg-white/95 text-[9px] font-medium uppercase tracking-wider backdrop-blur-md dark:bg-gray-900/95 ${
+              className={`sticky left-0 z-50 flex shrink-0 items-center justify-center calendar-agenda-surface bg-white/95 text-[9px] font-medium uppercase tracking-wider backdrop-blur-md dark:bg-gray-900/95 ${
                 hasBackground
                   ? "text-gray-700 dark:text-gray-200"
                   : "text-gray-400 dark:text-gray-500"
@@ -373,7 +373,7 @@ export function MobileWeekAgenda({
 
         <div className="flex">
           <div
-            className="sticky left-0 z-30 shrink-0 bg-white/95 backdrop-blur-md dark:bg-gray-900/95"
+            className="sticky left-0 z-30 shrink-0 calendar-agenda-surface bg-white/95 backdrop-blur-md dark:bg-gray-900/95"
             style={{ width: TIME_GUTTER_WIDTH, height: MOBILE_HOUR_HEIGHT * 24 }}
           >
             {HOURS.map((hour) => (

@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/security/logging";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
@@ -40,9 +41,7 @@ export async function POST(req: Request) {
       .catch((error) => ({
         active: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Google Calendar webhook setup failed.",
+          publicErrorMessage(error, "Google Calendar webhook setup failed."),
       }));
 
     return NextResponse.json({ ...result, ...repair, watch });
@@ -52,9 +51,7 @@ export async function POST(req: Request) {
       {
         requiresReconnect: isGoogleCalendarSyncError(error) && error.requiresReconnect,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to sync Google Calendar.",
+          publicErrorMessage(error, "Failed to sync Google Calendar."),
       },
       { status: statusCode }
     );

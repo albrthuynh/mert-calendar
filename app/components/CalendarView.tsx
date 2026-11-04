@@ -34,7 +34,7 @@ export function CalendarView() {
   }
 
   return (
-    <div className="flex-1 flex min-h-0 min-w-0">
+    <div className="calendar-appearance flex-1 flex min-h-0 min-w-0">
       {isDesktop ? (
         view === "month" ? (
           <MonthView

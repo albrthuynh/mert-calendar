@@ -1,3 +1,5 @@
+import { publicErrorMessage } from "@/lib/security/logging";
+import { logSecurityError } from "@/lib/security/logging";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -53,9 +55,7 @@ export async function GET() {
       {
         requiresReconnect: isGoogleCalendarSyncError(error) && error.requiresReconnect,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to list Google calendars.",
+          publicErrorMessage(error, "Failed to list Google calendars."),
       },
       { status: statusCode }
     );
@@ -92,7 +92,7 @@ export async function PUT(req: NextRequest) {
     const sources = await setGoogleCalendarSources(session.user.id, calendarIds);
     await syncGoogleCalendarForUser(session.user.id, { force: true });
     await ensureGoogleCalendarWatches(session.user.id).catch((error) => {
-      console.error("Google Calendar watch setup failed", error);
+      logSecurityError("Google Calendar watch setup failed", error);
     });
 
     return NextResponse.json({
@@ -110,9 +110,7 @@ export async function PUT(req: NextRequest) {
       {
         requiresReconnect: isGoogleCalendarSyncError(error) && error.requiresReconnect,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to update Google calendars.",
+          publicErrorMessage(error, "Failed to update Google calendars."),
       },
       { status: statusCode }
     );

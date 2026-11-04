@@ -1,3 +1,4 @@
+import { logSecurityError } from "@/lib/security/logging";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -204,7 +205,7 @@ export async function PUT(
       },
     });
     await pushLocalEventToGoogle(session.user.id, override.id).catch((error) => {
-      console.error("Google Calendar push failed", error);
+      logSecurityError("Google Calendar push failed", error);
     });
     bumpUserDataVersion("events", session.user.id);
 
@@ -306,7 +307,7 @@ export async function PUT(
     updated = await updateRequest;
   }
   await pushLocalEventToGoogle(session.user.id, updated.id, { timeZone }).catch((error) => {
-    console.error("Google Calendar push failed", error);
+    logSecurityError("Google Calendar push failed", error);
   });
   bumpUserDataVersion("events", session.user.id);
 
@@ -370,11 +371,11 @@ export async function DELETE(
         prisma.event.deleteMany({ where: { id: { in: removedOverrides.map((override) => override.id) } } }),
       ]);
       await pushLocalEventToGoogle(session.user.id, id, { timeZone }).catch((error) => {
-        console.error("Google Calendar push failed", error);
+        logSecurityError("Google Calendar push failed", error);
       });
       for (const override of removedOverrides) {
         await deleteLocalEventFromGoogle(session.user.id, override).catch((error) => {
-          console.error("Google Calendar delete failed", error);
+          logSecurityError("Google Calendar delete failed", error);
         });
       }
       bumpUserDataVersion("events", session.user.id);
@@ -414,7 +415,7 @@ export async function DELETE(
     });
     if (existingOverride) {
       await deleteLocalEventFromGoogle(session.user.id, existingOverride).catch((error) => {
-        console.error("Google Calendar delete failed", error);
+        logSecurityError("Google Calendar delete failed", error);
       });
     }
 
@@ -452,7 +453,7 @@ export async function DELETE(
     googleCalendarId: existing.googleCalendarId,
     parentEventId: existing.parentEventId,
   }).catch((error) => {
-    console.error("Google Calendar delete failed", error);
+    logSecurityError("Google Calendar delete failed", error);
   });
   await prisma.event.deleteMany({ where: { parentEventId: id } });
   await prisma.event.delete({ where: { id } });

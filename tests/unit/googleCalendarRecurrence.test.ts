@@ -1,3 +1,4 @@
+jest.mock("@/lib/security/rateLimit", () => ({ withSecurityLease: jest.fn(async (_key, operation) => operation()) }));
 import { handleGoogleCalendarWebhook, pushLocalEventToGoogle, repairMertEventsInGoogle, syncGoogleCalendarForUser } from "@/lib/googleCalendar";
 import { prisma } from "@/lib/prisma";
 import { expandRecurringEventForRange, type RecurringEventSeries } from "@/lib/recurringEvents";
@@ -167,7 +168,7 @@ describe("Google Calendar recurrence end date round trip", () => {
     expect(prisma.event.update).toHaveBeenCalledWith({ where: { id: unpublished.id }, data: expect.objectContaining({
       googleEventId: published.id, googleManagedByMert: true,
     }) });
-    expect(prisma.event.findMany).toHaveBeenCalledWith({ where: {
+    expect(prisma.event.findMany).toHaveBeenCalledWith({ take: 2001, where: {
       userId: "user-1", deleted: false, parentEventId: null,
       OR: [{ googleCalendarId: null }, { googleCalendarId: "primary" }],
     } });

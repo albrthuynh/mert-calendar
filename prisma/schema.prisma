@@ -33,11 +33,13 @@ model Session {
 }
 
 model User {
+  disabledAt               DateTime?
   id                       String    @id @default(cuid())
   name                     String?
   email                    String?   @unique
   emailVerified            DateTime?
   image                    String?
+  calendarColor            String?
   calendarBackgroundUrl    String?
   calendarTopLeftUrl       String?
   notificationsEnabled     Boolean   @default(false)
@@ -200,4 +202,18 @@ model Todo {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, taskDate])
+}
+
+model RateLimitBucket {
+  key       String @id
+  hits      Int
+  expiresAt DateTime @db.Timestamptz
+
+  @@index([expiresAt])
+}
+
+model SecurityLease {
+  key       String @id
+  owner     String
+  expiresAt DateTime @db.Timestamptz
 }

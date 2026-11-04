@@ -1,3 +1,4 @@
+import { invalidRange } from "@/lib/security/requestValidation";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
   const startKey = searchParams.get("startKey");
   const endKey = searchParams.get("endKey");
 
-  if (!startKey || !endKey || !DATE_KEY.test(startKey) || !DATE_KEY.test(endKey)) {
+  if (!startKey || !endKey || !DATE_KEY.test(startKey) || !DATE_KEY.test(endKey) || invalidRange(new Date(startKey), new Date(endKey))) {
     return NextResponse.json(
       { error: "startKey and endKey query params (YYYY-MM-DD) are required" },
       { status: 400 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getCalendarColorTheme } from "@/lib/calendarTheme";
+import { useTheme } from "next-themes";
+import type { CalendarPreferences } from "../context/CalendarPreferencesContext";
 import { createPortal } from "react-dom";
 import { signIn, signOut } from "next-auth/react";
 import {
@@ -40,10 +43,7 @@ type GoogleCalendarOption = {
 
 type SettingsTab = "appearance" | "notifications" | "sync" | "account";
 
-type AppearancePreferences = {
-  backgroundUrl: string | null;
-  topLeftUrl: string | null;
-};
+type AppearancePreferences = CalendarPreferences;
 
 type SettingsModalProps = {
   user: { name?: string | null; image?: string | null } | null | undefined;
@@ -73,6 +73,19 @@ export function SettingsModal({
   onSaveNotifications,
   onClose,
 }: SettingsModalProps) {
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  const [selectedTheme, setSelectedTheme] = useState(theme ?? "system");
+  const [calendarColor, setCalendarColor] = useState(initialAppearance.calendarColor);
+  const previewIsDark = selectedTheme === "dark" || (selectedTheme === "system" && resolvedTheme === "dark");
+  const previewStyle = {
+    backgroundColor: calendarColor ?? (previewIsDark ? "#111827" : "#ffffff"),
+    color: calendarColor
+      ? getCalendarColorTheme(calendarColor).foreground
+      : previewIsDark ? "#f9fafb" : "#111827",
+  };
+  const [appearanceSaved, setAppearanceSaved] = useState(false);
+  const [revokingSessions, setRevokingSessions] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
@@ -266,17 +279,34 @@ export function SettingsModal({
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/subscribe/${subscriptionToken}?timeZone=${encodeURIComponent(getBrowserTimeZone())}`
     : null;
 
+  const handleRevokeSessions = async () => {
+    setRevokingSessions(true);
+    setAccountError(null);
+    try {
+      const response = await fetch("/api/user/revoke-sessions", { method: "POST" });
+      if (!response.ok) throw new Error("Could not sign out all devices. Try again.");
+      await signOut({ callbackUrl: "/auth/signin" });
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : "Could not sign out all devices.");
+      setRevokingSessions(false);
+    }
+  };
+
   const handleAppearanceSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (appearanceSaving) return;
 
     setAppearanceSaving(true);
     setAppearanceError(null);
+    setAppearanceSaved(false);
     try {
       await onSaveAppearance({
+        calendarColor,
         backgroundUrl: backgroundUrl.trim() ? backgroundUrl.trim() : null,
         topLeftUrl: topLeftUrl.trim() ? topLeftUrl.trim() : null,
       });
+      setTheme(selectedTheme);
+      setAppearanceSaved(true);
     } catch (error) {
       setAppearanceError(error instanceof Error ? error.message : "Failed to save");
     } finally {
@@ -612,9 +642,35 @@ export function SettingsModal({
                     Calendar appearance
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Customize the calendar background and header image.
+                    Choose your theme, calendar color, and images.
                   </p>
                 </section>
+
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-medium text-gray-700 dark:text-gray-300">Theme</legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["light", "dark", "system"] as const).map((themeOption) => (
+                      <label key={themeOption} className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm capitalize ${selectedTheme === themeOption ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" : "border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300"}`}>
+                        <input type="radio" name="theme" value={themeOption} checked={selectedTheme === themeOption} onChange={() => { setSelectedTheme(themeOption); setAppearanceSaved(false); }} className="accent-blue-600" />
+                        {themeOption}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Used when calendar color is set to theme default. Saved on this device.</p>
+                </fieldset>
+
+                <fieldset className="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                  <legend className="px-1 text-xs font-medium text-gray-700 dark:text-gray-300">Calendar color</legend>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <input type="color" aria-label="Custom calendar color" value={calendarColor ?? "#4285f4"} onChange={(event) => { setCalendarColor(event.target.value); setAppearanceSaved(false); }} className="h-10 w-12 cursor-pointer rounded border border-gray-300 bg-transparent p-1 dark:border-gray-600" />
+                      {calendarColor ?? "Theme default"}
+                    </label>
+                    <button type="button" onClick={() => { setCalendarColor(null); setAppearanceSaved(false); }} className="rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">Use theme default</button>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Colors the entire calendar, including the header and to-dos. Text adjusts for readability.</p>
+                  <div aria-label="Calendar color preview" className="rounded-md border border-gray-200 p-3 text-xs dark:border-gray-700" style={previewStyle}>Your calendar, your color</div>
+                </fieldset>
 
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -642,6 +698,7 @@ export function SettingsModal({
                   />
                 </label>
 
+                {appearanceSaved && <p role="status" className="text-xs text-green-700 dark:text-green-400">Appearance saved.</p>}
                 {appearanceError && (
                   <p className="text-sm text-red-600 dark:text-red-400" role="alert">
                     {appearanceError}
@@ -1104,6 +1161,12 @@ export function SettingsModal({
                     <LogOut className="h-3.5 w-3.5" />
                     Sign out
                   </button>
+                  <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">End all active sessions, including this device.</p>
+                  <button type="button" onClick={handleRevokeSessions} disabled={revokingSessions} className="mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">
+                    {revokingSessions ? "Signing out…" : "Sign out all devices"}
+                  </button>
+                  {accountError && <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">{accountError}</p>}
+
                 </section>
               </div>
             )}

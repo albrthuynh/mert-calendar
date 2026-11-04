@@ -1,7 +1,9 @@
+import { loadEventsForRange } from "@/lib/eventRangeQueries";
+import { CalendarWorkloadError } from "@/lib/security/workload";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import ical, { ICalAlarmType } from "ical-generator";
-import { expandRecurringEventForRange, normalizeTimeZone } from "@/lib/recurringEvents";
+import { normalizeTimeZone } from "@/lib/recurringEvents";
 
 export async function GET(
   req: NextRequest,
@@ -17,7 +19,7 @@ export async function GET(
 
   // Find user by calendar subscription token
   const user = await prisma.user.findUnique({
-    where: { calendarSubscriptionToken: token },
+    where: { calendarSubscriptionToken: token, disabledAt: null },
     select: {
       id: true,
       name: true,
@@ -32,37 +34,17 @@ export async function GET(
     );
   }
 
-  // Fetch all events for this user (we'll generate a 1-year window)
   const now = new Date();
   const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
   const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const [standaloneEvents, seriesEvents] = await Promise.all([
-    prisma.event.findMany({
-      where: {
-        userId: user.id,
-        parentEventId: null,
-        deleted: false,
-        recurrenceRule: null,
-        startTime: { lte: oneYearFromNow },
-        endTime: { gte: oneMonthAgo },
-      },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: user.id,
-        parentEventId: null,
-        deleted: false,
-        NOT: { recurrenceRule: null },
-        startTime: { lte: oneYearFromNow },
-        OR: [
-          { recurrenceEndDate: null },
-          { recurrenceEndDate: { gte: oneMonthAgo } },
-        ],
-      },
-      include: { childEvents: true },
-    }),
-  ]);
+  let events;
+  try {
+    events = await loadEventsForRange(user.id, oneMonthAgo, oneYearFromNow, timeZone);
+  } catch (error) {
+    if (error instanceof CalendarWorkloadError) return NextResponse.json({ error: error.message }, { status: 422 });
+    throw error;
+  }
 
   // Create iCal calendar
   const calendar = ical({
@@ -77,19 +59,18 @@ export async function GET(
     ttl: 3600,
   });
 
-  // Add standalone events
-  for (const event of standaloneEvents) {
+  for (const event of events) {
     const calEvent = calendar.createEvent({
-      id: event.id,
-      start: event.startTime,
-      end: event.endTime,
+      id: event.isRecurringInstance && event.id === event.originalId
+        ? `${event.id}-${event.instanceStartTime}` : event.id,
+      start: new Date(event.startTime),
+      end: new Date(event.endTime),
       summary: event.title,
       description: event.description || undefined,
       url: event.link || undefined,
       allDay: event.allDay,
     });
 
-    // Add reminder if not disabled
     if (!event.reminderDisabled) {
       const reminderMinutes =
         event.reminderMinutes ?? user.defaultReminderMinutes;
@@ -98,64 +79,6 @@ export async function GET(
         trigger: reminderMinutes * 60, // Convert minutes to seconds (negative = before)
         description: `Reminder: ${event.title}`,
       });
-    }
-  }
-
-  // Add recurring events
-  for (const event of seriesEvents) {
-    try {
-      const occurrences = expandRecurringEventForRange(
-        event,
-        oneMonthAgo,
-        oneYearFromNow,
-        event.allDay ? "UTC" : timeZone
-      );
-
-      for (const occurrence of occurrences) {
-        const calEvent = calendar.createEvent({
-          id: occurrence.id === event.id
-            ? `${event.id}-${occurrence.instanceStartTime}`
-            : occurrence.id,
-          start: new Date(occurrence.startTime),
-          end: new Date(occurrence.endTime),
-          summary: occurrence.title,
-          description: occurrence.description || undefined,
-          url: occurrence.link || undefined,
-          allDay: occurrence.allDay,
-        });
-
-        if (!occurrence.reminderDisabled) {
-          const reminderMinutes =
-            occurrence.reminderMinutes ?? user.defaultReminderMinutes;
-          calEvent.createAlarm({
-            type: ICalAlarmType.display,
-            trigger: reminderMinutes * 60,
-            description: `Reminder: ${occurrence.title}`,
-          });
-        }
-      }
-    } catch (error) {
-      // If rrule parsing fails, fall back to showing the original event
-      console.error(`Error parsing recurrence rule for event ${event.id}:`, error);
-      const calEvent = calendar.createEvent({
-        id: event.id,
-        start: event.startTime,
-        end: event.endTime,
-        summary: event.title,
-        description: event.description || undefined,
-        url: event.link || undefined,
-        allDay: event.allDay,
-      });
-
-      if (!event.reminderDisabled) {
-        const reminderMinutes =
-          event.reminderMinutes ?? user.defaultReminderMinutes;
-        calEvent.createAlarm({
-          type: ICalAlarmType.display,
-          trigger: reminderMinutes * 60,
-          description: `Reminder: ${event.title}`,
-        });
-      }
     }
   }
 
@@ -168,8 +91,10 @@ export async function GET(
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": 'attachment; filename="calendar.ics"',
-      // Cache for 1 hour to encourage updates
-      "Cache-Control": "public, max-age=3600",
+      // The URL grants access to private events and can be revoked by rotating its token.
+      "Cache-Control": "private, no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
       // Additional headers for better compatibility
       "X-Published-TTL": "PT1H", // Suggest 1-hour refresh
     },

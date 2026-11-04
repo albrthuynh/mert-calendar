@@ -6,7 +6,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BriefcaseBusiness, CalendarDays } from "lucide-react";
-import { DarkModeToggle } from "./DarkModeToggle";
 import { SettingsModal } from "./SettingsModal";
 import { useCalendarPreferences } from "../context/CalendarPreferencesContext";
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
@@ -16,7 +15,7 @@ function UserMenu({
 }: {
   user: { name?: string | null; image?: string | null } | null | undefined;
 }) {
-  const { backgroundUrl, topLeftUrl, setPreferences } = useCalendarPreferences();
+  const { calendarColor, backgroundUrl, topLeftUrl, setPreferences } = useCalendarPreferences();
   const notifPrefs = useNotificationPreferences();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -52,7 +51,7 @@ function UserMenu({
       {showSettings && (
         <SettingsModal
           user={user}
-          initialAppearance={{ backgroundUrl, topLeftUrl }}
+          initialAppearance={{ calendarColor, backgroundUrl, topLeftUrl }}
           initialNotifications={{
             notificationsEnabled: notifPrefs.notificationsEnabled,
             defaultReminderMinutes: notifPrefs.defaultReminderMinutes,
@@ -61,12 +60,16 @@ function UserMenu({
             notificationVolume: notifPrefs.notificationVolume,
           }}
           onSaveAppearance={async (prefs) => {
-            await fetch("/api/user/calendar-settings", {
+            const response = await fetch("/api/user/calendar-settings", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(prefs),
             });
-            setPreferences(prefs);
+            if (!response.ok) {
+              const payload = await response.json().catch(() => null);
+              throw new Error(payload?.error || "Failed to save appearance");
+            }
+            setPreferences(await response.json());
           }}
           onSaveNotifications={async (prefs) => {
             const res = await fetch("/api/user/notification-settings", {
@@ -145,8 +148,6 @@ export function Navbar({ session }: { session: Session | null }) {
       </nav>
 
       <div className="flex-1" />
-
-      <DarkModeToggle />
 
       <UserMenu user={session?.user} />
     </header>

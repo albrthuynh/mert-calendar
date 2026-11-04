@@ -130,7 +130,7 @@ export function EventBlock({
         className={`text-xs font-semibold leading-tight truncate ${
           hasBackground ? "text-black dark:text-white" : ""
         }`}
-        style={{ color: hasBackground ? undefined : event.color }}
+        style={{ color: hasBackground ? undefined : `var(--calendar-event-text, ${event.color})` }}
       >
         {event.title}
       </p>
@@ -139,7 +139,7 @@ export function EventBlock({
           className={`text-xs leading-tight truncate ${
             hasBackground ? "text-black/85 dark:text-white/85" : "opacity-70"
           }`}
-          style={{ color: hasBackground ? undefined : event.color }}
+          style={{ color: hasBackground ? undefined : `var(--calendar-event-text, ${event.color})` }}
         >
           {format(start, "h:mm a")} – {format(end, "h:mm a")}
           {event.recurrenceRule && (

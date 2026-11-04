@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/security/logging";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getGoogleEventGuests, inviteGoogleEventGuests, isGoogleCalendarSyncError } from "@/lib/googleCalendar";
@@ -5,7 +6,7 @@ import { normalizeGuestEmails, type EventGuestScope } from "@/lib/eventGuests";
 
 function guestErrorResponse(error: unknown) {
   return NextResponse.json({
-    error: error instanceof Error ? error.message : "Could not access the event's guests.",
+    error: publicErrorMessage(error, "Could not access the event's guests."),
     requiresReconnect: isGoogleCalendarSyncError(error) && error.requiresReconnect,
   }, { status: isGoogleCalendarSyncError(error) ? error.status : 500 });
 }
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     emails = normalizeGuestEmails(body.emails);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid guest emails." }, { status: 400 });
+    return NextResponse.json({ error: publicErrorMessage(error, "Invalid guest emails.") }, { status: 400 });
   }
   const { id } = await params;
   try {

@@ -1,3 +1,4 @@
+import { logSecurityError } from "@/lib/security/logging";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +17,7 @@ export async function GET() {
   const cacheKey = `events-version:${userId}:${getUserDataVersion("events", userId)}`;
   const version = await getOrSetInMemoryCache(cacheKey, VERSION_CACHE_TTL_MS, async () => {
     await syncGoogleCalendarForUser(userId).catch((error) => {
-      console.error("Google Calendar auto-sync failed", error);
+      logSecurityError("Google Calendar auto-sync failed", error);
     });
 
     const user = await prisma.user.findUnique({

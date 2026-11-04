@@ -187,6 +187,39 @@ export function recurrenceEndToUtcDayEnd(date: Date, timeZone: string) {
   return wallPartsToUtcDate(wallDateToParts(recurrenceEndToWallDayEnd(date)), timeZone);
 }
 
+function parseBoundedRecurrence(rule: string) {
+  if (rule.length > 1000) throw new Error("Repeat schedule is too long.");
+  const options = RRule.parseString(rule);
+  if (options.interval !== undefined && (!Number.isInteger(options.interval) || options.interval < 1 || options.interval > 366)) {
+    throw new Error("Repeat interval must be an integer between 1 and 366.");
+  }
+  const selectors: Array<[number | number[] | null | undefined, number, number]> = [
+    [options.byhour, 0, 23], [options.byminute, 0, 59], [options.bysecond, 0, 59],
+    [options.bymonth, 1, 12], [options.bymonthday, -31, 31],
+    [options.byyearday, -366, 366], [options.byweekno, -53, 53], [options.bysetpos, -366, 366],
+  ];
+  for (const [selector, minimum, maximum] of selectors) {
+    if (selector === undefined || selector === null) continue;
+    const values = Array.isArray(selector) ? selector : [selector];
+    if (values.some((value) => !Number.isInteger(value) || value < minimum || value > maximum || (minimum < 0 && value === 0))) {
+      throw new Error("Repeat schedule has an invalid selector.");
+    }
+  }
+  let dailyTimes = 1;
+  for (const selector of [options.byhour, options.byminute, options.bysecond]) {
+    if (Array.isArray(selector)) dailyTimes *= Math.max(1, selector.length);
+  }
+  if (dailyTimes > 24) throw new Error("Repeat schedules may contain at most 24 times per day.");
+  if (options.freq !== undefined && options.freq > RRule.DAILY) {
+    throw new Error("Repeat schedules must be daily or less frequent.");
+  }
+  if (options.count !== undefined && options.count !== null && (!Number.isSafeInteger(options.count) || options.count < 1 || options.count > 100000)) {
+    throw new Error("Repeat counts must be between 1 and 100000.");
+  }
+  if (options.until && !Number.isFinite(options.until.getTime())) throw new Error("Repeat end date must be valid.");
+  return options;
+}
+
 export function validateEventSchedule(event: {
   startTime: Date;
   endTime: Date;
@@ -208,7 +241,7 @@ export function validateEventSchedule(event: {
   }
   let recurrence: RRule;
   try {
-    const options = RRule.parseString(event.recurrenceRule);
+    const options = parseBoundedRecurrence(event.recurrenceRule);
     if (options.freq === undefined) throw new Error("Missing frequency");
     if (options.count !== undefined && options.count !== null && (!Number.isInteger(options.count) || options.count <= 0)) {
       throw new Error("Invalid count");
@@ -225,12 +258,12 @@ export function validateEventSchedule(event: {
 
 export function eventStartMatchesRecurrence(rule: string, startTime: Date, timeZone: string) {
   const wallStart = dateToWallDate(startTime, timeZone);
-  const recurrence = new RRule({ ...RRule.parseString(rule), dtstart: wallStart });
-  return recurrence.after(wallStart, true)?.getTime() === wallStart.getTime();
+  const recurrence = new RRule({ ...parseBoundedRecurrence(rule), dtstart: wallStart });
+  return recurrence.between(wallStart, wallStart, true).some((occurrence) => occurrence.getTime() === wallStart.getTime());
 }
 
 export function getLastRecurrenceStartBeforeDate(rule: string, startTime: Date, endDate: Date, timeZone: string) {
-  const recurrence = new RRule({ ...RRule.parseString(rule), dtstart: dateToWallDate(startTime, timeZone) });
+  const recurrence = new RRule({ ...parseBoundedRecurrence(rule), dtstart: dateToWallDate(startTime, timeZone) });
   const lastWallStart = recurrence.before(recurrenceEndToWallDayEnd(endDate), true);
   return lastWallStart ? wallPartsToUtcDate(wallDateToParts(lastWallStart), timeZone) : null;
 }
@@ -258,7 +291,7 @@ export function truncateSeriesBeforeInstance(
     throw new Error("A recurring series and valid occurrence timestamp are required.");
   }
   const rule = new RRule({
-    ...RRule.parseString(event.recurrenceRule),
+    ...parseBoundedRecurrence(event.recurrenceRule),
     dtstart: dateToWallDate(event.startTime, timeZone),
   });
   if (instanceStart.getTime() === event.startTime.getTime()) {
@@ -271,7 +304,7 @@ export function truncateSeriesBeforeInstance(
     : null;
   let precedingCount = 0;
   let selectedIdentity: ReturnType<typeof getOccurrenceIdentity> | undefined;
-  rule.all((occurrence) => {
+  rule.between(dateToWallDate(event.startTime, timeZone), searchEnd, true, (occurrence) => {
     if (occurrence > searchEnd || (recurrenceLimit && occurrence > recurrenceLimit)) return false;
     const identity = getOccurrenceIdentity(event, occurrence, timeZone);
     if (identity.instanceId === selectedInstanceId || identity.legacyInstanceId === selectedInstanceId) {
@@ -370,12 +403,15 @@ export function expandRecurringEventForRange(
     recurrenceLimit && recurrenceLimit < wallRangeEnd ? recurrenceLimit : wallRangeEnd;
 
   const rule = new RRule({
-    ...RRule.parseString(recurrenceRule),
+    ...parseBoundedRecurrence(recurrenceRule),
     dtstart: dateToWallDate(event.startTime, timeZone),
   });
   const occurrences = occurrenceEnd < wallRangeStart
     ? []
-    : rule.between(wallRangeStart, occurrenceEnd, true);
+    : rule.between(wallRangeStart, occurrenceEnd, true, (_occurrence, index) => {
+      if (index >= 2000) throw new Error("Too many repeat occurrences in this range.");
+      return true;
+    });
   const occurrenceWallTimes = new Set(occurrences.map((occurrence) => occurrence.getTime()));
   const wallSeriesStart = dateToWallDate(event.startTime, timeZone);
   // The chosen start is an occurrence even when a copied rule names other weekdays.

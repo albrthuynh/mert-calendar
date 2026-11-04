@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { normalizeCalendarColor, normalizeCalendarImageUrl } from "@/lib/calendarAppearance";
 
 export async function GET() {
   const session = await auth();
@@ -11,6 +12,7 @@ export async function GET() {
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
+      calendarColor: true,
       calendarBackgroundUrl: true,
       calendarTopLeftUrl: true,
     },
@@ -24,6 +26,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
+    calendarColor: user.calendarColor ?? null,
     backgroundUrl: user.calendarBackgroundUrl ?? null,
     topLeftUrl: user.calendarTopLeftUrl ?? null,
   });
@@ -35,20 +38,21 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { backgroundUrl, topLeftUrl } = body as {
-    backgroundUrl?: string | null;
-    topLeftUrl?: string | null;
-  };
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Expected a JSON object" }, { status: 400 });
+  }
 
-  const cleanBackground =
-    typeof backgroundUrl === "string" && backgroundUrl.trim().length > 0
-      ? backgroundUrl.trim().slice(0, 2048)
-      : null;
-  const cleanTopLeft =
-    typeof topLeftUrl === "string" && topLeftUrl.trim().length > 0
-      ? topLeftUrl.trim().slice(0, 2048)
-      : null;
+  let cleanColor: string | null | undefined;
+  let cleanBackground: string | null | undefined;
+  let cleanTopLeft: string | null | undefined;
+  try {
+    cleanColor = normalizeCalendarColor(body.calendarColor);
+    cleanBackground = normalizeCalendarImageUrl(body.backgroundUrl);
+    cleanTopLeft = normalizeCalendarImageUrl(body.topLeftUrl);
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+  }
 
   const userExists = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -64,16 +68,19 @@ export async function PUT(req: NextRequest) {
   const updated = await prisma.user.update({
     where: { id: session.user.id },
     data: {
+      calendarColor: cleanColor,
       calendarBackgroundUrl: cleanBackground,
       calendarTopLeftUrl: cleanTopLeft,
     },
     select: {
+      calendarColor: true,
       calendarBackgroundUrl: true,
       calendarTopLeftUrl: true,
     },
   });
 
   return NextResponse.json({
+    calendarColor: updated.calendarColor,
     backgroundUrl: updated.calendarBackgroundUrl,
     topLeftUrl: updated.calendarTopLeftUrl,
   });

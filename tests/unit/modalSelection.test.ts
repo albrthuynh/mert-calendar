@@ -26,10 +26,13 @@ const connectedStatus = {
   watchExpiresAt: null,
 };
 
-function settingsModal(onClose = jest.fn()) {
+const setTheme = jest.fn();
+jest.mock("next-themes", () => ({ useTheme: () => ({ theme: "system", resolvedTheme: "light", setTheme }) }));
+
+function settingsModal(onClose = jest.fn(), onSaveAppearance = jest.fn()) {
   return createElement(GoogleCalendarConnectionProvider, null, createElement(SettingsModal, {
     user: null,
-    initialAppearance: { backgroundUrl: null, topLeftUrl: null },
+    initialAppearance: { calendarColor: "#4285f4", backgroundUrl: null, topLeftUrl: null },
     initialNotifications: {
       notificationsEnabled: false,
       defaultReminderMinutes: 10,
@@ -37,7 +40,7 @@ function settingsModal(onClose = jest.fn()) {
       notificationSound: "beep",
       notificationVolume: 80,
     },
-    onSaveAppearance: jest.fn(),
+    onSaveAppearance,
     onSaveNotifications: jest.fn(),
     onClose,
   }));
@@ -97,6 +100,26 @@ describe("dialog selection and Google reconnection", () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   }
+
+  it("saves theme and clears a custom calendar color without changing images", async () => {
+    const saveAppearance = jest.fn();
+    await act(async () => root.render(settingsModal(jest.fn(), saveAppearance)));
+    await act(async () => document.querySelector<HTMLInputElement>('input[name="theme"][value="dark"]')!.click());
+    const resetColorButton = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Use theme default")!;
+    await act(async () => resetColorButton.click());
+    await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(saveAppearance).toHaveBeenCalledWith({ calendarColor: null, backgroundUrl: null, topLeftUrl: null });
+    expect(setTheme).toHaveBeenCalledWith("dark");
+    expect(document.body.textContent).toContain("Appearance saved.");
+  });
+
+  it("retains the current theme and reports a failed appearance save", async () => {
+    const saveAppearance = jest.fn().mockRejectedValue(new Error("Could not save appearance"));
+    await act(async () => root.render(settingsModal(jest.fn(), saveAppearance)));
+    await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe("Could not save appearance");
+    expect(setTheme).not.toHaveBeenCalled();
+  });
 
   it.each([false, true])("preserves the repeat end date and all-day flag (%s) when reopening a copy", async (allDay) => {
     const event: CalendarEvent = {

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@variant dark (&:where(.dark, .dark *));
+@variant dark (&:where(.dark, .dark *, [data-calendar-tone="dark"], [data-calendar-tone="dark"] *):not(:where([data-calendar-tone="light"], [data-calendar-tone="light"] *)));
 
 :root {
   --background: #ffffff;
@@ -350,4 +350,87 @@ body {
 }
 .dark .scrollbar-thin::-webkit-scrollbar-thumb {
   background-color: #374151;
+}
+
+.calendar-appearance {
+  --calendar-surface: var(--calendar-custom-color, #ffffff);
+  --calendar-month-base: var(--calendar-custom-color, #ffffff);
+}
+
+.dark .calendar-appearance,
+[data-calendar-tone="dark"] .calendar-appearance {
+  --calendar-surface: var(--calendar-custom-color, #111827);
+  --calendar-month-base: var(--calendar-custom-color, #030712);
+}
+
+[data-calendar-tone="light"] .calendar-appearance {
+  --calendar-surface: var(--calendar-custom-color);
+  --calendar-month-base: var(--calendar-custom-color);
+}
+
+.calendar-surface {
+  background-color: var(--calendar-surface);
+}
+
+.calendar-surface-overlay {
+  background-color: color-mix(in srgb, var(--calendar-surface) 70%, transparent);
+}
+
+.calendar-month-surface {
+  background-color: var(--calendar-month-base);
+}
+
+[data-calendar-tone] {
+  --background: var(--calendar-custom-color);
+  background: var(--calendar-custom-color);
+  color-scheme: light;
+}
+
+[data-calendar-tone="dark"] {
+  color-scheme: dark;
+  --foreground: #ffffff;
+  --calendar-event-text: #ffffff;
+  --color-gray-950: color-mix(in srgb, var(--calendar-custom-color) 95%, black);
+  --color-gray-900: var(--calendar-custom-color);
+  --color-gray-800: color-mix(in srgb, var(--calendar-custom-color) 92%, white);
+  --color-gray-700: color-mix(in srgb, var(--calendar-custom-color) 78%, white);
+  --color-gray-600: color-mix(in srgb, var(--calendar-custom-color) 50%, white);
+  --color-gray-500: color-mix(in srgb, var(--calendar-custom-color) 35%, white);
+  --color-gray-400: color-mix(in srgb, var(--calendar-custom-color) 25%, white);
+  --color-gray-300: color-mix(in srgb, var(--calendar-custom-color) 18%, white);
+  --color-gray-200: color-mix(in srgb, var(--calendar-custom-color) 10%, white);
+  --color-gray-100: color-mix(in srgb, var(--calendar-custom-color) 5%, white);
+  --color-gray-50: #ffffff;
+}
+
+[data-calendar-tone="light"] {
+  --foreground: #000000;
+  --calendar-event-text: #000000;
+  --color-gray-50: var(--calendar-custom-color);
+  --color-gray-100: color-mix(in srgb, var(--calendar-custom-color) 95%, black);
+  --color-gray-200: color-mix(in srgb, var(--calendar-custom-color) 80%, black);
+  --color-gray-300: color-mix(in srgb, var(--calendar-custom-color) 65%, black);
+  --color-gray-400: color-mix(in srgb, var(--calendar-custom-color) 45%, black);
+  --color-gray-500: color-mix(in srgb, var(--calendar-custom-color) 35%, black);
+  --color-gray-600: color-mix(in srgb, var(--calendar-custom-color) 25%, black);
+  --color-gray-700: color-mix(in srgb, var(--calendar-custom-color) 15%, black);
+  --color-gray-800: color-mix(in srgb, var(--calendar-custom-color) 10%, black);
+  --color-gray-900: color-mix(in srgb, var(--calendar-custom-color) 5%, black);
+  --color-gray-950: #000000;
+}
+
+[data-calendar-tone="light"] .bg-white {
+  background-color: var(--calendar-custom-color);
+}
+
+[data-calendar-tone] .calendar-agenda-surface {
+  background-color: var(--calendar-custom-color);
+}
+
+[data-calendar-tone] .month-event {
+  background: color-mix(in srgb, var(--event-color) 18%, var(--calendar-custom-color));
+}
+
+[data-calendar-tone] .month-event:hover {
+  background: color-mix(in srgb, var(--event-color) 27%, var(--calendar-custom-color));
 }

@@ -457,11 +457,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
 
   return (
     <div
-      className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900 min-h-0"
+      className="flex flex-col flex-1 overflow-hidden calendar-surface min-h-0"
       style={containerStyle}
     >
       {/* Navigation */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200/80 dark:border-white/[0.07] shrink-0 bg-white dark:bg-gray-900">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200/80 dark:border-white/[0.07] shrink-0 calendar-surface">
         <button
           onClick={goToToday}
           className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300"
@@ -518,7 +518,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
       </div>
 
       {/* Calendar + sidebar */}
-      <div className="flex flex-1 overflow-hidden min-h-0 bg-white/[0.98] dark:bg-gray-950/95">
+      <div className="flex flex-1 overflow-hidden min-h-0 calendar-month-surface">
         <div className="flex flex-col flex-1 overflow-hidden min-h-0">
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-gray-200/80 dark:border-white/[0.07] shrink-0">

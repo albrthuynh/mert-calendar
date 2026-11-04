@@ -1,3 +1,7 @@
+import { loadEventsForRange } from "@/lib/eventRangeQueries";
+import { CalendarWorkloadError } from "@/lib/security/workload";
+import { logSecurityError } from "@/lib/security/logging";
+import { invalidRange } from "@/lib/security/requestValidation";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -11,130 +15,14 @@ import {
   syncGoogleCalendarForUser,
 } from "@/lib/googleCalendar";
 import {
-  expandRecurringEventForRange,
   normalizeTimeZone,
   validateEventSchedule,
   type RecurringEventResponseItem,
 } from "@/lib/recurringEvents";
-import { isReadOnlyGoogleCalendarId } from "@/lib/googleCalendarReadOnly";
 
 const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 type EventResponseItem = RecurringEventResponseItem;
-
-async function loadEventsForRange(
-  userId: string,
-  rangeStart: Date,
-  rangeEnd: Date,
-  timeZone: string
-): Promise<EventResponseItem[]> {
-  // Fetch base events:
-  // - standalone non-recurring events that overlap the range (excluding per-instance overrides)
-  // - recurring series events + their per-instance override children
-  const [standaloneEvents, seriesEvents] = await Promise.all([
-    prisma.event.findMany({
-      where: {
-        userId,
-        parentEventId: null,
-        deleted: false,
-        recurrenceRule: null,
-        startTime: { lte: rangeEnd },
-        endTime: { gte: rangeStart },
-      },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId,
-        parentEventId: null,
-        deleted: false,
-        NOT: { recurrenceRule: null },
-        OR: [
-          {
-            startTime: { lte: rangeEnd },
-            OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: rangeStart } }],
-          },
-          {
-            childEvents: {
-              some: {
-                deleted: false,
-                startTime: { lte: rangeEnd },
-                endTime: { gt: rangeStart },
-              },
-            },
-          },
-        ],
-      },
-
-    }),
-  ]);
-
-  // Legacy occurrence keys retain the series' original UTC hour across DST.
-  const identityStart = new Date(rangeStart.getTime() - 2 * 86400000).toISOString();
-  const identityEnd = new Date(rangeEnd.getTime() + 2 * 86400000).toISOString();
-  const overrides = seriesEvents.length ? await prisma.event.findMany({
-    where: {
-      userId,
-      parentEventId: { in: seriesEvents.map((series) => series.id) },
-      OR: [
-        { startTime: { lte: rangeEnd }, endTime: { gt: rangeStart } },
-        ...seriesEvents.map((series) => ({ instanceId: {
-          gte: `${series.id}__${identityStart}`,
-          lte: `${series.id}__${identityEnd}`,
-        } })),
-      ],
-    },
-  }) : [];
-  const overridesByParent = new Map<string, typeof overrides>();
-  for (const override of overrides) {
-    if (!override.parentEventId) continue;
-    const children = overridesByParent.get(override.parentEventId) ?? [];
-    children.push(override);
-    overridesByParent.set(override.parentEventId, children);
-  }
-
-  // Expand recurring events into occurrences within range
-  const result: EventResponseItem[] = [];
-
-  for (const event of standaloneEvents) {
-    result.push({
-      ...event,
-      startTime: event.startTime.toISOString(),
-      endTime: event.endTime.toISOString(),
-      recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
-      reminderMinutes: event.reminderMinutes ?? null,
-      reminderDisabled: event.reminderDisabled ?? false,
-      isRecurringInstance: false,
-      originalId: event.id,
-      instanceStartTime: null,
-      readOnly: isReadOnlyGoogleCalendarId(event.googleCalendarId),
-    });
-  }
-
-  for (const event of seriesEvents) {
-    // Expand recurring event
-    try {
-      result.push(
-        ...expandRecurringEventForRange({ ...event, childEvents: overridesByParent.get(event.id) ?? [] }, rangeStart, rangeEnd, timeZone)
-      );
-    } catch {
-      // If rrule fails, fall back to showing original
-      result.push({
-        ...event,
-        startTime: event.startTime.toISOString(),
-        endTime: event.endTime.toISOString(),
-        recurrenceEndDate: event.recurrenceEndDate?.toISOString() ?? null,
-        reminderMinutes: event.reminderMinutes ?? null,
-        reminderDisabled: event.reminderDisabled ?? false,
-        isRecurringInstance: false,
-        originalId: event.id,
-        instanceStartTime: null,
-        readOnly: isReadOnlyGoogleCalendarId(event.googleCalendarId),
-      });
-    }
-  }
-
-  return result;
-}
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -156,15 +44,15 @@ export async function GET(req: NextRequest) {
 
   const rangeStart = new Date(start);
   const rangeEnd = new Date(end);
-  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+  if (invalidRange(rangeStart, rangeEnd)) {
     return NextResponse.json(
-      { error: "start and end must be valid ISO timestamps" },
+      { error: "start and end must be valid, ordered dates no more than 400 days apart" },
       { status: 400 }
     );
   }
 
   await syncGoogleCalendarForUser(session.user.id).catch((error) => {
-    console.error("Google Calendar auto-sync failed", error);
+    logSecurityError("Google Calendar auto-sync failed", error);
   });
 
   const user = await prisma.user.findUnique({
@@ -182,13 +70,16 @@ export async function GET(req: NextRequest) {
     rangeEnd.toISOString(),
   ].join(":");
 
-  const result = await getOrSetInMemoryCache<EventResponseItem[]>(
-    cacheKey,
-    EVENTS_CACHE_TTL_MS,
-    () => loadEventsForRange(session.user.id, rangeStart, rangeEnd, timeZone)
-  );
-
-  return NextResponse.json(result);
+  try {
+    const result = await getOrSetInMemoryCache<EventResponseItem[]>(
+      cacheKey, EVENTS_CACHE_TTL_MS,
+      () => loadEventsForRange(session.user.id, rangeStart, rangeEnd, timeZone)
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof CalendarWorkloadError) return NextResponse.json({ error: error.message }, { status: 422 });
+    throw error;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -288,7 +179,7 @@ export async function POST(req: NextRequest) {
     },
   });
   await pushLocalEventToGoogle(session.user.id, event.id, { timeZone }).catch((error) => {
-    console.error("Google Calendar push failed", error);
+    logSecurityError("Google Calendar push failed", error);
   });
   bumpUserDataVersion("events", session.user.id);
 

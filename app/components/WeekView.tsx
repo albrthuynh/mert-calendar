@@ -756,11 +756,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
 
   return (
     <div
-      className="flex flex-col flex-1 min-w-0 overflow-hidden bg-white dark:bg-gray-900 min-h-0"
+      className="flex flex-col flex-1 min-w-0 overflow-hidden calendar-surface min-h-0"
       style={containerStyle}
     >
       {/* Week navigation */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 calendar-surface">
         <button
           type="button"
           onClick={goToToday}
@@ -821,7 +821,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
       </div>
 
       {/* Calendar + optional sidebar */}
-      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white/70 dark:bg-gray-900/70">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden calendar-surface-overlay">
       <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
 
       {/* Day headers + todo sections */}

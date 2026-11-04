@@ -2,7 +2,7 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
 /**
- * Edge-compatible auth config — no Prisma, no Node.js-only modules.
+ * Shared OAuth configuration — no Prisma, no Node.js-only modules.
  * Used by the proxy (middleware) and extended by the full auth config.
  */
 export const authConfig: NextAuthConfig = {
@@ -25,7 +25,7 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const isProtected = nextUrl.pathname.startsWith("/calendar");
+      const isProtected = nextUrl.pathname.startsWith("/calendar") || nextUrl.pathname.startsWith("/jobs");
       if (isProtected) {
         if (isLoggedIn) return true;
         const signInUrl = new URL("/auth/signin", nextUrl);

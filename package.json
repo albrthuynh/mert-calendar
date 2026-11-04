@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "tokens:encrypt": "node scripts/encrypt-google-tokens.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",

@@ -540,12 +540,12 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
     : undefined;
 
   const overBackgroundClass = backgroundUrl
-    ? "bg-white/70 dark:bg-gray-900/70"
+    ? "calendar-surface-overlay"
     : "";
 
   return (
     <div
-      className="flex flex-col flex-1 overflow-hidden bg-white dark:bg-gray-900"
+      className="flex flex-col flex-1 overflow-hidden calendar-surface"
       style={containerStyle}
     >
       {calendarMode === "day" ? (
@@ -747,7 +747,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       )}
 
       {/* Current Day Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 shrink-0 calendar-surface">
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
             {calendarMode === "week"
@@ -893,7 +893,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
       </div>
 
       {/* Content */}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-white/70 dark:bg-gray-900/70">
+      <div className="relative min-h-0 flex-1 overflow-hidden calendar-surface-overlay">
         {calendarMode === "week" ? (
           <MobileWeekAgenda
             weekDays={weekDays}
