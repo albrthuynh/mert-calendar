@@ -3,14 +3,8 @@ import { invalidRange } from "@/lib/security/requestValidation";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  bumpUserDataVersion,
-  getOrSetInMemoryCache,
-  getUserDataVersion,
-} from "@/lib/inMemoryCache";
+import { bumpUserDataVersion } from "@/lib/inMemoryCache";
 import { addDays } from "date-fns";
-
-const TODOS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -38,28 +32,18 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const version = getUserDataVersion("todos", session.user.id);
-  const cacheKey = [
-    "todos",
-    session.user.id,
-    `v${version}`,
-    rangeStart.toISOString(),
-    rangeEnd.toISOString(),
-  ].join(":");
-
-  const todos = await getOrSetInMemoryCache(cacheKey, TODOS_CACHE_TTL_MS, () =>
-    prisma.todo.findMany({
-      take: 2001,
-      where: {
-        userId: session.user.id,
-        taskDate: {
-          gte: rangeStart,
-          lte: rangeEnd,
-        },
+  // Process-local invalidation cannot see mutations handled by another server instance.
+  const todos = await prisma.todo.findMany({
+    take: 2001,
+    where: {
+      userId: session.user.id,
+      taskDate: {
+        gte: rangeStart,
+        lte: rangeEnd,
       },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    })
-  );
+    },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+  });
 
   try {
     if (todos.length > 2000) throw new CalendarWorkloadError();
@@ -68,7 +52,9 @@ export async function GET(req: NextRequest) {
     if (error instanceof CalendarWorkloadError) return NextResponse.json({ error: error.message }, { status: 422 });
     throw error;
   }
-  return NextResponse.json(todos);
+  return NextResponse.json(todos, {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 export async function POST(req: NextRequest) {

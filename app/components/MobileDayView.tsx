@@ -55,6 +55,7 @@ import {
   fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
+  deleteTodo,
   invalidateEventsCache,
   invalidateImportantDaysCache,
   invalidateTodosCache,
@@ -465,9 +466,8 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   );
 
   const handleTodoDelete = useCallback(async (id: string) => {
+    await deleteTodo(id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
-    await fetch(`/api/todos/${id}`, { method: "DELETE" });
-    invalidateTodosCache();
   }, []);
 
   const handleTodoEdit = useCallback(async (id: string, title: string) => {

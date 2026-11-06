@@ -89,6 +89,15 @@ export function invalidateTodosCache() {
   invalidateScope("todos");
 }
 
+export async function deleteTodo(id: string) {
+  const response = await fetch(`/api/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error ?? "Could not delete to-do. Please try again.");
+  }
+  invalidateTodosCache();
+}
+
 export function invalidateImportantDaysCache() {
   invalidateScope("importantDays");
 }

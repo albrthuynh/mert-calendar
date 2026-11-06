@@ -9,7 +9,7 @@ import { TodoFormModal } from "./TodoFormModal";
 interface TodoItemProps {
   todo: Todo;
   onToggle: (id: string, completed: boolean) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
   onEdit: (id: string, title: string) => void;
   variant?: "embedded" | "sidebar";
   onUpdate: (todo: Todo) => void;
@@ -28,6 +28,8 @@ export function TodoItem({
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(todo.title);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -164,7 +166,18 @@ export function TodoItem({
           </button>
         )}
         <button
-          onClick={() => onDelete(todo.id)}
+          onClick={async () => {
+            setDeleting(true);
+            setDeleteError(null);
+            try {
+              await onDelete(todo.id);
+            } catch (error) {
+              setDeleteError(error instanceof Error ? error.message : "Could not delete to-do. Please try again.");
+            } finally {
+              setDeleting(false);
+            }
+          }}
+          disabled={deleting}
           className={`mt-0.5 shrink-0 p-0.5 rounded transition-colors ${
             hasBackground
               ? "text-gray-700 hover:text-gray-900 dark:text-white/70 dark:hover:text-white"
@@ -175,6 +188,8 @@ export function TodoItem({
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
+
+      {deleteError && <p role="alert" className="w-full text-xs text-red-500">{deleteError}</p>}
 
       {showDetailsModal && (
         <TodoFormModal
