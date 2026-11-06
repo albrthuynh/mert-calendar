@@ -111,11 +111,13 @@ export async function checkMutationRequest(request: Request) {
   const rejectedOrigin = checkRequestOrigin(request);
   if (rejectedOrigin) return rejectedOrigin;
   if (!request.body) return null;
+  const body = await readBoundedRequestBody(request);
+  if (body instanceof NextResponse) return body;
+  // Server adapters may expose an empty stream for requests sent without a body.
+  if (body.length === 0) return null;
   if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
   }
-  const body = await readBoundedRequestBody(request);
-  if (body instanceof NextResponse) return body;
   try {
     validateMutationPayload(new URL(request.url).pathname, request.method, JSON.parse(body));
     return null;

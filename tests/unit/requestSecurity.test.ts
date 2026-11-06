@@ -27,6 +27,26 @@ it("accepts valid writes without consuming the handler's body and permits bodyle
   expect(await checkMutationRequest(new Request("https://calendar.example/api/user/revoke-sessions", { method: "POST", headers: { origin: "https://calendar.example" } }))).toBeNull();
 });
 
+it("permits an empty DELETE body stream without requiring a JSON content type", async () => {
+  const request = new Request("https://calendar.example/api/todos/todo-1", {
+    method: "DELETE", headers: { origin: "https://calendar.example" }, body: "",
+  });
+  // Server adapters can represent a bodyless DELETE as an empty stream.
+  expect(request.body).not.toBeNull();
+  expect(await checkMutationRequest(request)).toBeNull();
+});
+
+it("still rejects cross-origin empty deletes and non-JSON delete payloads", async () => {
+  const crossOrigin = new Request("https://calendar.example/api/todos/todo-1", {
+    method: "DELETE", headers: { origin: "https://attacker.example" }, body: "",
+  });
+  expect((await checkMutationRequest(crossOrigin))?.status).toBe(403);
+  const nonJson = new Request("https://calendar.example/api/todos/todo-1", {
+    method: "DELETE", headers: { origin: "https://calendar.example" }, body: "not JSON",
+  });
+  expect((await checkMutationRequest(nonJson))?.status).toBe(415);
+});
+
 it.each([{ title: 123 }, { title: " " }, { dueDate: "invalid" }, { taskDate: "2500-01-01" }, { completed: "false" }, { order: -1 }, { description: "a".repeat(16001) }])("rejects unsafe todo payloads", (body) => {
   expect(() => validateMutationPayload("/api/todos/id", "PUT", body)).toThrow();
 });
