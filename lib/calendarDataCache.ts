@@ -1,3 +1,4 @@
+import { clearSavedEvents, saveEvents } from "./persistentEventCache";
 import { BoundedCache } from "./boundedCache";
 import { buildEventsUrl } from "@/lib/eventFetchUrl";
 import type { CalendarEvent, ImportantDay, Todo } from "@/types/calendar";
@@ -29,7 +30,8 @@ function cacheKey(scope: string, parts: string[]) {
 async function fetchJson<T>(
   key: string,
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
+  onAccepted?: (data: T) => void
 ): Promise<T> {
   const now = Date.now();
   const existing = cache.get(key) as CacheEntry<T> | undefined;
@@ -55,6 +57,7 @@ async function fetchJson<T>(
         data,
         expiresAt: Date.now() + CALENDAR_DATA_CACHE_TTL_MS,
       }, CALENDAR_DATA_CACHE_TTL_MS);
+      onAccepted?.(data);
       return data;
     })
     .finally(() => {
@@ -83,6 +86,7 @@ function invalidateScope(scope: string) {
 
 export function invalidateEventsCache() {
   invalidateScope("events");
+  clearSavedEvents();
 }
 
 export function invalidateTodosCache() {
@@ -104,18 +108,21 @@ export function invalidateImportantDaysCache() {
 
 export function invalidateCalendarDataCache() {
   cache.clear();
+  clearSavedEvents();
   knownEventsVersion = null;
 }
 
 export function fetchEventsForRange(
   start: string,
   end: string,
-  options?: FetchOptions
+  options?: FetchOptions & { userId?: string }
 ) {
+  const userId = options?.userId;
   return fetchJson<CalendarEvent[]>(
-    cacheKey("events", [start, end, buildEventsUrl(start, end)]),
+    cacheKey("events", [userId ?? "", start, end, buildEventsUrl(start, end)]),
     buildEventsUrl(start, end),
-    options
+    options,
+    userId ? (events) => saveEvents(userId, start, end, events) : undefined
   );
 }
 
@@ -161,7 +168,8 @@ export async function eventsVersionChanged() {
   const version = await eventsVersionInFlight;
   if (knownEventsVersion === null) {
     knownEventsVersion = version;
-    return false;
+    // The first check may have imported Google changes after the initial event read.
+    return true;
   }
 
   if (knownEventsVersion !== version) {

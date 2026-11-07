@@ -12,7 +12,6 @@ import {
 import { normalizeEventLink } from "@/lib/eventLink";
 import {
   pushLocalEventToGoogle,
-  syncGoogleCalendarForUser,
 } from "@/lib/googleCalendar";
 import {
   normalizeTimeZone,
@@ -51,10 +50,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  await syncGoogleCalendarForUser(session.user.id).catch((error) => {
-    logSecurityError("Google Calendar auto-sync failed", error);
-  });
-
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { eventsRevision: true },
@@ -75,7 +70,7 @@ export async function GET(req: NextRequest) {
       cacheKey, EVENTS_CACHE_TTL_MS,
       () => loadEventsForRange(session.user.id, rangeStart, rangeEnd, timeZone)
     );
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof CalendarWorkloadError) return NextResponse.json({ error: error.message }, { status: 422 });
     throw error;

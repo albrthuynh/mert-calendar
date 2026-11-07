@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/events/route";
 import { auth } from "@/lib/auth";
+import { syncGoogleCalendarForUser } from "@/lib/googleCalendar";
 import { prisma } from "@/lib/prisma";
 
 jest.mock("@/lib/auth", () => ({ auth: jest.fn() }));
@@ -20,7 +21,10 @@ it("retains moved-out and cancelled occurrence identities while bounding overrid
     startTime: new Date("2026-12-01T12:00:00Z"), endTime: new Date("2026-12-01T13:00:00Z"), deleted: false };
   (prisma.event.findMany as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([series]).mockResolvedValueOnce([moved]);
   const request = new NextRequest("http://localhost/api/events?start=2026-10-28T00:00:00Z&end=2026-10-28T23:59:59Z&timeZone=UTC");
-  expect(await (await GET(request)).json()).toEqual([]);
+  const response = await GET(request);
+  expect(await response.json()).toEqual([]);
+  expect(syncGoogleCalendarForUser).not.toHaveBeenCalled();
+  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   const overrideQuery = (prisma.event.findMany as jest.Mock).mock.calls[2][0];
   expect(overrideQuery.where.parentEventId).toEqual({ in: ["series"] });
   expect(overrideQuery.where.OR).toEqual(expect.arrayContaining([

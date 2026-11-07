@@ -1,5 +1,6 @@
 "use client";
 
+import { useCalendarEvents } from "../hooks/useCalendarEvents";
 import { useCalendarEventRefresh } from "../hooks/useCalendarEventRefresh";
 
 import {
@@ -52,7 +53,6 @@ import {
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
 import {
-  fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
   deleteTodo,
@@ -125,7 +125,6 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
-  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<MobileTab>("events");
   const [calendarMode, setCalendarMode] = useState<MobileCalendarMode>("day");
 
@@ -161,21 +160,16 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   const visibleStartIso = visibleRange.start.toISOString();
   const visibleEndIso = visibleRange.end.toISOString();
 
-  // Fetch events + todos when the visible mobile range changes.
+  const { loading, refreshEvents } = useCalendarEvents(visibleStartIso, visibleEndIso, setEvents);
+
+  // Fetch todos when the visible mobile range changes.
   useEffect(() => {
     const fetchAll = async () => {
-      setLoading(true);
       try {
-        const [nextEvents, nextTodos] = await Promise.all([
-          fetchEventsForRange(visibleStartIso, visibleEndIso),
-          fetchTodosForRange(visibleStartIso, visibleEndIso),
-        ]);
-        setEvents(nextEvents);
+        const nextTodos = await fetchTodosForRange(visibleStartIso, visibleEndIso);
         setTodos(nextTodos);
       } catch {
         // empty
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -261,13 +255,6 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
   }, []);
 
   // ── Event handlers ──────────────────────────────────────────
-
-  const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
-    const range = getVisibleRange(calendarMode, currentDay);
-    const start = range.start.toISOString();
-    const end = range.end.toISOString();
-    setEvents(await fetchEventsForRange(start, end, options));
-  }, [calendarMode, currentDay]);
 
   useCalendarEventRefresh(refreshEvents);
 

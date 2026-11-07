@@ -36,7 +36,6 @@ import {
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
 import {
-  fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
   deleteTodo,
@@ -47,6 +46,7 @@ import {
 import { useNotificationPreferences } from "../context/NotificationPreferencesContext";
 import { useEventReminderScheduler } from "../hooks/useEventReminderScheduler";
 import { useTodoReminderScheduler } from "../hooks/useTodoReminderScheduler";
+import { useCalendarEvents } from "../hooks/useCalendarEvents";
 import { useCalendarEventRefresh } from "../hooks/useCalendarEventRefresh";
 import { useLiveNow } from "../hooks/useLiveNow";
 
@@ -74,7 +74,6 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
-  const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
 
@@ -108,7 +107,6 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
   const [gridScrollbarWidth, setGridScrollbarWidth] = useState(0);
   const notifPrefs = useNotificationPreferences();
 
-  useEventReminderScheduler({ events, prefs: notifPrefs });
   useTodoReminderScheduler({ todos, prefs: notifPrefs });
 
   // Scroll to the current-time red line on first mount
@@ -159,28 +157,29 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     [weekStart]
   );
 
-  // Fetch events + todos whenever the visible week changes
+  const { loading: loadingEvents, refreshEvents } = useCalendarEvents(
+    weekStart.toISOString(), weekEnd.toISOString(), setEvents
+  );
+
+  useEventReminderScheduler({ events, prefs: notifPrefs });
+
+  // Fetch todos and important days whenever the visible week changes
   useEffect(() => {
     const start = weekStart.toISOString();
     const end = weekEnd.toISOString();
 
     const fetchAll = async () => {
-      setLoadingEvents(true);
       try {
         const startKey = format(weekStart, "yyyy-MM-dd");
         const endKey = format(weekEnd, "yyyy-MM-dd");
-        const [nextEvents, nextTodos, nextImportantDays] = await Promise.all([
-          fetchEventsForRange(start, end),
+        const [nextTodos, nextImportantDays] = await Promise.all([
           fetchTodosForRange(start, end),
           fetchImportantDaysForRange(startKey, endKey),
         ]);
-        setEvents(nextEvents);
         setTodos(nextTodos);
         setImportantDays(nextImportantDays);
       } catch {
         // Silently fail; user will see empty state
-      } finally {
-        setLoadingEvents(false);
       }
     };
 
@@ -390,12 +389,6 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
     },
     []
   );
-
-  const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
-    const start = weekStart.toISOString();
-    const end = weekEnd.toISOString();
-    setEvents(await fetchEventsForRange(start, end, options));
-  }, [weekStart, weekEnd]);
 
   useCalendarEventRefresh(refreshEvents);
 

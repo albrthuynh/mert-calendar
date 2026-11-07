@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/app/components/Navbar";
 import { CalendarTheme } from "@/app/components/CalendarTheme";
+import { CalendarCacheProvider } from "../context/CalendarCacheContext";
 import { CalendarView } from "@/app/components/CalendarView";
 import { CalendarPreferencesProvider } from "../context/CalendarPreferencesContext";
 import { NotificationPreferencesProvider } from "../context/NotificationPreferencesContext";
@@ -24,7 +25,9 @@ export default async function CalendarPage() {
         <GoogleCalendarConnectionProvider key={session.user.id} initialStatus={googleStatus}>
           <div className="flex flex-col h-screen min-w-0 overflow-hidden bg-white dark:bg-gray-900">
             <Navbar session={session} />
-            <CalendarView />
+            <CalendarCacheProvider key={session.user.id} userId={session.user.id}>
+              <CalendarView />
+            </CalendarCacheProvider>
           </div>
         </GoogleCalendarConnectionProvider>
       </NotificationPreferencesProvider>

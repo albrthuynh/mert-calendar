@@ -5,6 +5,7 @@ import { getCalendarColorTheme } from "@/lib/calendarTheme";
 import { useTheme } from "next-themes";
 import type { CalendarPreferences } from "../context/CalendarPreferencesContext";
 import { createPortal } from "react-dom";
+import { invalidateCalendarDataCache } from "@/lib/calendarDataCache";
 import { signIn, signOut } from "next-auth/react";
 import {
   Bell,
@@ -285,6 +286,7 @@ export function SettingsModal({
     try {
       const response = await fetch("/api/user/revoke-sessions", { method: "POST" });
       if (!response.ok) throw new Error("Could not sign out all devices. Try again.");
+      invalidateCalendarDataCache();
       await signOut({ callbackUrl: "/auth/signin" });
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : "Could not sign out all devices.");
@@ -1155,7 +1157,10 @@ export function SettingsModal({
                 <section className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                   <button
                     type="button"
-                    onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+                    onClick={() => {
+                      invalidateCalendarDataCache();
+                      void signOut({ callbackUrl: "/auth/signin" });
+                    }}
                     className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
                     <LogOut className="h-3.5 w-3.5" />

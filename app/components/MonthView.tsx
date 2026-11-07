@@ -1,5 +1,6 @@
 "use client";
 
+import { useCalendarEvents } from "../hooks/useCalendarEvents";
 import { useCalendarEventRefresh } from "../hooks/useCalendarEventRefresh";
 
 import { useState, useEffect, useCallback, type CSSProperties } from "react";
@@ -35,7 +36,6 @@ import {
   removeDeletedEventFromList,
 } from "@/lib/eventDelete";
 import {
-  fetchEventsForRange,
   fetchImportantDaysForRange,
   fetchTodosForRange,
   deleteTodo,
@@ -102,7 +102,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
 
@@ -132,27 +131,26 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
   const fetchStart = startOfDay(gridFirstDay);
   const fetchEnd = endOfDay(gridLastDay);
 
+  const { loading, refreshEvents } = useCalendarEvents(
+    fetchStart.toISOString(), fetchEnd.toISOString(), setEvents
+  );
+
   useEffect(() => {
     const start = fetchStart.toISOString();
     const end = fetchEnd.toISOString();
 
     const fetchAll = async () => {
-      setLoading(true);
       try {
         const startKey = format(fetchStart, "yyyy-MM-dd");
         const endKey = format(fetchEnd, "yyyy-MM-dd");
-        const [nextEvents, nextTodos, nextImportantDays] = await Promise.all([
-          fetchEventsForRange(start, end),
+        const [nextTodos, nextImportantDays] = await Promise.all([
           fetchTodosForRange(start, end),
           fetchImportantDaysForRange(startKey, endKey),
         ]);
-        setEvents(nextEvents);
         setTodos(nextTodos);
         setImportantDays(nextImportantDays);
       } catch {
         /* empty */
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -199,12 +197,6 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
     },
     [popoverEvent]
   );
-
-  const fetchStartIso = fetchStart.toISOString();
-  const fetchEndIso = fetchEnd.toISOString();
-  const refreshEvents = useCallback(async (options?: { force?: boolean }) => {
-    setEvents(await fetchEventsForRange(fetchStartIso, fetchEndIso, options));
-  }, [fetchStartIso, fetchEndIso]);
 
   useCalendarEventRefresh(refreshEvents);
 
