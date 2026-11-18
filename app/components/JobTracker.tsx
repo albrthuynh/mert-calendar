@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   BriefcaseBusiness,
@@ -291,14 +291,18 @@ function StatusDropdown({
 function DeleteConfirmationDialog({
   application,
   isDeleting,
+  error,
   onCancel,
   onConfirm,
 }: {
-  application: JobApplication;
+  application?: JobApplication;
+  error?: string;
   isDeleting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const titleId = useId();
+
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape" && !isDeleting) onCancel();
@@ -318,28 +322,28 @@ function DeleteConfirmationDialog({
       <div
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby={`delete-application-title-${application.id}`}
+        aria-labelledby={titleId}
         className="job-modal-enter w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
       >
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
           <Trash2 size={18} />
         </div>
         <h2
-          id={`delete-application-title-${application.id}`}
+          id={titleId}
           className="mt-4 text-lg font-semibold text-gray-900 dark:text-white"
         >
-          Delete application?
+          {application ? "Delete application?" : "Clear all applications?"}
         </h2>
         <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
-          This will permanently remove{" "}
-          <span className="font-semibold text-gray-700 dark:text-gray-200">
-            {application.title || "this untitled application"}
-          </span>
-          {application.company ? ` at ${application.company}` : ""}.
+          {application
+            ? `This will permanently remove ${application.title || "this untitled application"}${application.company ? ` at ${application.company}` : ""}.`
+            : "This will permanently remove all applications, including any hidden by search or filters."}
         </p>
+        {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
+            autoFocus
             onClick={onCancel}
             disabled={isDeleting}
             className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
@@ -353,7 +357,7 @@ function DeleteConfirmationDialog({
             className="inline-flex min-w-24 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
           >
             {isDeleting && <LoaderCircle size={15} className="animate-spin" />}
-            {isDeleting ? "Deleting…" : "Delete"}
+            {isDeleting ? "Deleting…" : application ? "Delete" : "Clear all"}
           </button>
         </div>
       </div>
@@ -812,6 +816,10 @@ export function JobTracker() {
   >("ALL");
   const [isCreatingApplication, setIsCreatingApplication] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [addButtonLocation, setAddButtonLocation] = useState<"top" | "bottom">("top");
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+  const [isClearingApplications, setIsClearingApplications] = useState(false);
+  const [clearError, setClearError] = useState("");
   const [applicationToRevealId, setApplicationToRevealId] =
     useState<string | null>(null);
 
@@ -891,18 +899,11 @@ export function JobTracker() {
   }, [filteredApplications, applicationToRevealId]);
 
   function handleSavedApplication(savedApplication: JobApplication) {
-    setApplications((currentApplications) => {
-      const applicationExists = currentApplications.some(
-        (application) => application.id === savedApplication.id
-      );
-      return applicationExists
-        ? currentApplications.map((application) =>
-            application.id === savedApplication.id
-              ? savedApplication
-              : application
-          )
-        : [...currentApplications, savedApplication];
-    });
+    setApplications((currentApplications) =>
+      currentApplications.map((application) =>
+        application.id === savedApplication.id ? savedApplication : application
+      )
+    );
   }
 
   function handleDeletedApplication(applicationId: string) {
@@ -913,7 +914,28 @@ export function JobTracker() {
     );
   }
 
-  async function addApplication() {
+  async function clearApplications() {
+    setIsClearingApplications(true);
+    setClearError("");
+
+    try {
+      const response = await fetch("/api/job-applications", { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not clear applications. Try again.");
+
+      setApplications([]);
+      setSearchQuery("");
+      setStatusFilter("ALL");
+      setCreateError("");
+      setShowClearConfirmation(false);
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : "Could not clear applications.");
+    } finally {
+      setIsClearingApplications(false);
+    }
+  }
+
+  async function addApplication(location: "top" | "bottom") {
+    setAddButtonLocation(location);
     setIsCreatingApplication(true);
     setCreateError("");
 
@@ -946,9 +968,39 @@ export function JobTracker() {
     }
   }
 
+  function renderAddApplication(location: "top" | "bottom") {
+    const isAddingHere = isCreatingApplication && addButtonLocation === location;
+    return (
+      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <button
+            type="button"
+            onClick={() => void addApplication(location)}
+            disabled={isLoading || Boolean(loadError) || isCreatingApplication || showClearConfirmation}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-400 sm:w-auto"
+          >
+            {isAddingHere ? (
+              <LoaderCircle size={17} className="animate-spin" />
+            ) : (
+              <Plus size={17} />
+            )}
+            {isAddingHere ? "Adding…" : "Add application"}
+          </button>
+          {createError && addButtonLocation === location && (
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
+            >
+              <CircleAlert size={15} />
+              {createError}
+            </div>
+          )}
+      </div>
+    );
+  }
+
   return (
     <main className="job-tracker-bg min-h-0 flex-1 overflow-y-auto text-gray-900 dark:text-gray-50">
-      <div className="mx-auto max-w-[1600px] px-4 pb-16 pt-7 sm:px-6 lg:px-10 lg:pt-9">
+      <div inert={showClearConfirmation} className="mx-auto max-w-[1600px] px-4 pb-16 pt-7 sm:px-6 lg:px-10 lg:pt-9">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
@@ -958,31 +1010,24 @@ export function JobTracker() {
               Edit any field directly in the table.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={addApplication}
-            disabled={isCreatingApplication}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-400 sm:w-auto"
-          >
-            {isCreatingApplication ? (
-              <LoaderCircle size={17} className="animate-spin" />
-            ) : (
-              <Plus size={17} />
-            )}
-            {isCreatingApplication ? "Adding…" : "Add application"}
-          </button>
+          <div className="flex flex-wrap items-start gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setClearError("");
+                setShowClearConfirmation(true);
+              }}
+              disabled={applications.length === 0 || isCreatingApplication || showClearConfirmation}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-rose-300 dark:hover:bg-rose-950/40"
+            >
+              <Trash2 size={16} />
+              Clear applications
+            </button>
+            {renderAddApplication("top")}
+          </div>
         </header>
 
         <section className="mt-5">
-          {createError && (
-            <div
-              role="alert"
-              className="mb-4 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
-            >
-              <CircleAlert size={15} />
-              {createError}
-            </div>
-          )}
           <div className="flex flex-col gap-4 pb-5 xl:flex-row xl:items-center">
             <div className="relative flex-1">
               <Search
@@ -1101,10 +1146,21 @@ export function JobTracker() {
                   </div>
                 )}
               </div>
+              <div className="mt-4">
+                {renderAddApplication("bottom")}
+              </div>
             </>
           )}
         </section>
       </div>
+      {showClearConfirmation && (
+        <DeleteConfirmationDialog
+          isDeleting={isClearingApplications}
+          error={clearError}
+          onCancel={() => setShowClearConfirmation(false)}
+          onConfirm={clearApplications}
+        />
+      )}
     </main>
   );
 }
