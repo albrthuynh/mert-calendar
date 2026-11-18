@@ -554,6 +554,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
           removeDeletedEventFromList(prev, recurringDeletePending, scope)
         );
         invalidateEventsCache();
+        if (editingEvent === recurringDeletePending) {
+          setShowEventModal(false);
+          setEditingEvent(undefined);
+          setCreateDate(undefined);
+        }
         setRecurringDeletePending(null);
       } catch (error) {
         setRecurringDeleteError(
@@ -563,7 +568,7 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
         setRecurringDeleteBusy(false);
       }
     },
-    [recurringDeletePending]
+    [editingEvent, recurringDeletePending]
   );
 
   const handleDeleteFromSidebar = useCallback(async () => {
@@ -1018,6 +1023,11 @@ export function WeekView({ onViewChange, backgroundUrl }: WeekViewProps = {}) {
             setShowEventModal(false);
             setEditingEvent(undefined);
             setCreateDate(undefined);
+          }}
+          deleteConfirmationOpen={Boolean(recurringDeletePending)}
+          onDeleteRecurringEvent={(event) => {
+            setRecurringDeleteError(null);
+            setRecurringDeletePending(event);
           }}
           onSave={handleEventSaved}
         />

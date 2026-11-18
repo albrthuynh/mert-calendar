@@ -350,6 +350,11 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
           removeDeletedEventFromList(prev, recurringDeletePending, scope)
         );
         invalidateEventsCache();
+        if (editingEvent === recurringDeletePending) {
+          setShowEventModal(false);
+          setEditingEvent(undefined);
+          setCreateDate(undefined);
+        }
         setRecurringDeletePending(null);
       } catch (error) {
         setRecurringDeleteError(
@@ -359,7 +364,7 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
         setRecurringDeleteBusy(false);
       }
     },
-    [recurringDeletePending]
+    [editingEvent, recurringDeletePending]
   );
 
   const handleDeleteFromSidebar = useCallback(async () => {
@@ -1032,6 +1037,11 @@ export function MobileDayView({ backgroundUrl }: MobileDayViewProps) {
             setShowEventModal(false);
             setEditingEvent(undefined);
             setCreateDate(undefined);
+          }}
+          deleteConfirmationOpen={Boolean(recurringDeletePending)}
+          onDeleteRecurringEvent={(event) => {
+            setRecurringDeleteError(null);
+            setRecurringDeletePending(event);
           }}
           onSave={handleEventSaved}
         />

@@ -268,6 +268,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
           removeDeletedEventFromList(prev, recurringDeletePending, scope)
         );
         invalidateEventsCache();
+        if (editingEvent === recurringDeletePending) {
+          setShowEventModal(false);
+          setEditingEvent(undefined);
+          setCreateDate(undefined);
+        }
         setRecurringDeletePending(null);
       } catch (error) {
         setRecurringDeleteError(
@@ -277,7 +282,7 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
         setRecurringDeleteBusy(false);
       }
     },
-    [recurringDeletePending]
+    [editingEvent, recurringDeletePending]
   );
 
   const handleEditFromPopover = useCallback(() => {
@@ -723,6 +728,11 @@ export function MonthView({ onViewChange, backgroundUrl }: MonthViewProps) {
             setShowEventModal(false);
             setEditingEvent(undefined);
             setCreateDate(undefined);
+          }}
+          deleteConfirmationOpen={Boolean(recurringDeletePending)}
+          onDeleteRecurringEvent={(event) => {
+            setRecurringDeleteError(null);
+            setRecurringDeletePending(event);
           }}
           onSave={handleEventSaved}
         />

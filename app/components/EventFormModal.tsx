@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Link, X } from "lucide-react";
+import { Link, Trash2, X } from "lucide-react";
 import { CalendarEvent } from "@/types/calendar";
 import { ColorPicker } from "./ColorPicker";
 import { RecurrenceSelector } from "./RecurrenceSelector";
@@ -14,6 +14,8 @@ interface EventFormModalProps {
   event?: CalendarEvent;
   onClose: () => void;
   onSave: (event: CalendarEvent) => void;
+  onDeleteRecurringEvent?: (event: CalendarEvent) => void;
+  deleteConfirmationOpen?: boolean;
 }
 
 function toLocalDatetimeValue(date: Date): string {
@@ -27,6 +29,8 @@ export function EventFormModal({
   event,
   onClose,
   onSave,
+  onDeleteRecurringEvent,
+  deleteConfirmationOpen = false,
 }: EventFormModalProps) {
   const isEditing = !!event;
   const canChooseRecurringEditScope = Boolean(
@@ -80,11 +84,11 @@ export function EventFormModal({
   // Close on Escape
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !deleteConfirmationOpen) onClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [deleteConfirmationOpen, onClose]);
 
   useEffect(() => {
     titleInputRef.current?.focus();
@@ -201,6 +205,7 @@ export function EventFormModal({
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-black/50"
       onPointerDown={onClose}
+      inert={deleteConfirmationOpen}
       role="presentation"
     >
       <div className="min-h-full flex w-full items-center justify-center p-4">
@@ -404,7 +409,18 @@ export function EventFormModal({
           )}
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            {event && !event.readOnly && canChooseRecurringEditScope && onDeleteRecurringEvent && (
+              <button
+                type="button"
+                onClick={() => onDeleteRecurringEvent(event)}
+                disabled={saving}
+                className="mr-auto inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete…
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
